@@ -1,0 +1,34 @@
+{
+  "name": "iracing-telemetry-overlay",
+  "version": "1.0.0",
+  "description": "Real-time telemetry overlay for iRacing",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron": "electron .",
+    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
+  },
+  "keywords": [
+    "iRacing",
+    "telemetry",
+    "overlay",
+    "electron"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.2",
+    "electron": "^28.2.0",
+    "vite": "^5.0.10",
+    "wait-on": "^7.2.0"
+  }
+}

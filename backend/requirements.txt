@@ -1,0 +1,4 @@
+pyirsdk
+websockets
+numpy
+pyyaml
