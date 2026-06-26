@@ -191,11 +191,11 @@ export default function App() {
       {/* Sidebar Controls */}
       <div className="dashboard-sidebar">
         <div>
-          <h1 className="text-neon-blue" style={{ fontSize: '24px', fontWeight: '800', marginBottom: '4px' }}>
-            ANTIGRAVITY
+          <h1 className="text-neon-blue" style={{ fontSize: '24px', fontWeight: '800', marginBottom: '4px', letterSpacing: '0.5px' }}>
+            TrueLine
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '12px', letterSpacing: '1px' }}>
-            IRACING TELEMETRY OVERLAY
+          <p style={{ color: 'var(--text-secondary)', fontSize: '10px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            A FromRigToRoad performance product
           </p>
         </div>
 
@@ -285,7 +285,7 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 'auto', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
-          v1.0.0 &bull; iRacing SDK Overlay
+          v1.0.0 &bull; TrueLine by FromRigToRoad
         </div>
       </div>
 

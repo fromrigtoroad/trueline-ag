@@ -1,7 +1,7 @@
 {
-  "name": "iracing-telemetry-overlay",
+  "name": "trueline",
   "version": "1.0.0",
-  "description": "Real-time telemetry overlay for iRacing",
+  "description": "TrueLine - A FromRigToRoad performance product",
   "main": "main.js",
   "scripts": {
     "dev": "vite",
@@ -19,7 +19,7 @@
     "overlay",
     "electron"
   ],
-  "author": "Antigravity",
+  "author": "FromRigToRoad",
   "license": "MIT",
   "dependencies": {
     "react": "^18.2.0",
@@ -36,8 +36,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.antigravity.iracingoverlay",
-    "productName": "iRacing Telemetry Overlay",
+    "appId": "com.fromrigtoroad.trueline",
+    "productName": "TrueLine",
     "directories": {
       "output": "dist-electron"
     },

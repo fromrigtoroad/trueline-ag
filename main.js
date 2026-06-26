@@ -104,7 +104,7 @@ function createMainWindow() {
     },
     show: false,
     backgroundColor: '#0c0f12',
-    title: "iRacing Telemetry Overlay - Dashboard"
+    title: "TrueLine - Dashboard"
   });
 
   const mainUrl = isDev 
