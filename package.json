@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "electron": "electron .",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "dist:bridge": "pyinstaller --clean --onedir --noconfirm --name bridge --paths backend backend/bridge.py",
+    "dist:bridge": "pyinstaller --clean --onedir --noconfirm --name bridge --paths backend --distpath backend/dist backend/bridge.py",
     "dist:electron": "electron-builder --win --dir",
     "dist:build": "npm run build && npm run dist:bridge && electron-builder --win"
   },
