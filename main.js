@@ -11,40 +11,19 @@ let pythonProcess = null;
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function startPythonBridge() {
-  const pythonScript = path.join(__dirname, 'backend', 'bridge.py');
+  const isPackaged = app.isPackaged;
   
-  // Prioritize virtual environment python if it exists
-  const venvPython = process.platform === 'win32'
-    ? path.join(__dirname, 'venv', 'Scripts', 'python.exe')
-    : path.join(__dirname, 'venv', 'bin', 'python');
+  if (isPackaged) {
+    const exeName = process.platform === 'win32' ? 'bridge.exe' : 'bridge';
+    const binPath = path.join(process.resourcesPath, 'backend', 'bridge', exeName);
     
-  const pythonCmds = [];
-  if (fs.existsSync(venvPython)) {
-    pythonCmds.push(venvPython);
-  }
-  pythonCmds.push(process.platform === 'win32' ? 'python' : 'python3');
-  pythonCmds.push('python');
-  pythonCmds.push('python3');
-  
-  let cmdIndex = 0;
-  
-  function trySpawn() {
-    if (cmdIndex >= pythonCmds.length) {
-      console.error("Could not find Python to start the telemetry bridge.");
-      return;
-    }
-    
-    const cmd = pythonCmds[cmdIndex];
-    console.log(`Spawning Python bridge: ${cmd} ${pythonScript}`);
-    
-    pythonProcess = spawn(cmd, [pythonScript], {
+    console.log(`Spawning packaged Python bridge: ${binPath}`);
+    pythonProcess = spawn(binPath, [], {
       stdio: ['ignore', 'pipe', 'pipe']
     });
     
     pythonProcess.on('error', (err) => {
-      console.warn(`Failed to start with ${cmd}: ${err.message}`);
-      cmdIndex++;
-      trySpawn();
+      console.error(`Failed to start packaged Python bridge: ${err.message}`);
     });
     
     pythonProcess.stdout.on('data', (data) => {
@@ -58,9 +37,58 @@ function startPythonBridge() {
     pythonProcess.on('close', (code) => {
       console.log(`Python bridge closed with code ${code}`);
     });
+  } else {
+    const pythonScript = path.join(__dirname, 'backend', 'bridge.py');
+    
+    // Prioritize virtual environment python if it exists
+    const venvPython = process.platform === 'win32'
+      ? path.join(__dirname, 'venv', 'Scripts', 'python.exe')
+      : path.join(__dirname, 'venv', 'bin', 'python');
+      
+    const pythonCmds = [];
+    if (fs.existsSync(venvPython)) {
+      pythonCmds.push(venvPython);
+    }
+    pythonCmds.push(process.platform === 'win32' ? 'python' : 'python3');
+    pythonCmds.push('python');
+    pythonCmds.push('python3');
+    
+    let cmdIndex = 0;
+    
+    function trySpawn() {
+      if (cmdIndex >= pythonCmds.length) {
+        console.error("Could not find Python to start the telemetry bridge.");
+        return;
+      }
+      
+      const cmd = pythonCmds[cmdIndex];
+      console.log(`Spawning Python bridge: ${cmd} ${pythonScript}`);
+      
+      pythonProcess = spawn(cmd, [pythonScript], {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      
+      pythonProcess.on('error', (err) => {
+        console.warn(`Failed to start with ${cmd}: ${err.message}`);
+        cmdIndex++;
+        trySpawn();
+      });
+      
+      pythonProcess.stdout.on('data', (data) => {
+        console.log(`[Python Stdout]: ${data.toString().trim()}`);
+      });
+      
+      pythonProcess.stderr.on('data', (data) => {
+        console.error(`[Python Stderr]: ${data.toString().trim()}`);
+      });
+      
+      pythonProcess.on('close', (code) => {
+        console.log(`Python bridge closed with code ${code}`);
+      });
+    }
+    
+    trySpawn();
   }
-  
-  trySpawn();
 }
 
 function createMainWindow() {

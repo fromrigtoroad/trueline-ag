@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
-    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\""
+    "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "dist:bridge": "pyinstaller --clean --onedir --noconfirm --name bridge --paths backend backend/bridge.py",
+    "dist:electron": "electron-builder --win --dir",
+    "dist:build": "npm run build && npm run dist:bridge && electron-builder --win"
   },
   "keywords": [
     "iRacing",
@@ -28,7 +31,33 @@
     "@vitejs/plugin-react": "^4.2.0",
     "concurrently": "^8.2.2",
     "electron": "^28.2.0",
+    "electron-builder": "^24.13.3",
     "vite": "^5.0.10",
     "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.antigravity.iracingoverlay",
+    "productName": "iRacing Telemetry Overlay",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/bridge",
+        "to": "backend/bridge"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    }
   }
 }
