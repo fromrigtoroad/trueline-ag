@@ -30,6 +30,8 @@ class TelemetryBridge:
         self.reference_lap = None # List of dicts: [{'pct', 'throttle', 'brake', 'speed', 'time'}]
         self.reference_lap_num = None
         self.reference_lap_time_str = None
+        self.braking_points = []
+        self.throttle_points = []
         
         # Recording state
         self.is_recording = False
@@ -42,6 +44,29 @@ class TelemetryBridge:
         # Cache for parsed IBT files
         # key: file_path, value: list of lap dicts
         self.parsed_ibt_cache = {}
+
+    def set_reference_lap(self, interpolated, lap_num, lap_time_str):
+        self.reference_lap = interpolated
+        self.reference_lap_num = lap_num
+        self.reference_lap_time_str = lap_time_str
+        self.braking_points = []
+        self.throttle_points = []
+        
+        if not interpolated:
+            return
+            
+        num_points = len(interpolated)
+        for i in range(num_points):
+            curr = interpolated[i]
+            prev = interpolated[(i - 1) % num_points]
+            
+            # Brake starts: rises above 5%
+            if curr.get('brake', 0.0) > 0.05 and prev.get('brake', 0.0) <= 0.05:
+                self.braking_points.append(curr['pct'])
+                
+            # Throttle starts: rises above 5%
+            if curr.get('throttle', 0.0) > 0.05 and prev.get('throttle', 0.0) <= 0.05:
+                self.throttle_points.append(curr['pct'])
 
     def init_irsdk(self):
         """
@@ -143,6 +168,23 @@ class TelemetryBridge:
                 
         user_lap_time = session_time - self.lap_start_time
 
+        # Safely get coordinates for player
+        user_x = 0.0
+        user_y = 0.0
+        user_z = 0.0
+        if self.use_mock:
+            user_x = raw_data.get("CarIdxPosX", [0.0])[0]
+            user_y = raw_data.get("CarIdxPosY", [0.0])[0]
+            user_z = raw_data.get("CarIdxPosZ", [0.0])[0]
+        else:
+            player_idx = raw_data.get("PlayerCarIdx", 0)
+            try:
+                user_x = self.ir["CarIdxPosX"][player_idx]
+                user_y = self.ir["CarIdxPosY"][player_idx]
+                user_z = self.ir["CarIdxPosZ"][player_idx]
+            except Exception:
+                pass
+
         # 2. Record tick if enabled
         if self.is_recording:
             self.recorded_ticks.append({
@@ -151,12 +193,20 @@ class TelemetryBridge:
                 "throttle": raw_data["throttle"],
                 "brake": raw_data["brake"],
                 "speed": raw_data["speed"] / 3.6,  # store in m/s
-                "gear": raw_data["gear"]
+                "gear": raw_data["gear"],
+                "x": user_x,
+                "y": user_y,
+                "z": user_z
             })
 
         # 3. Calculate comparison telemetry if reference is loaded
         comparison = {
-            "hasReference": False
+            "hasReference": False,
+            "distToBrake": 9999.0,
+            "distToThrottle": 9999.0,
+            "lateralDeviation": 0.0,
+            "refBrakeActive": False,
+            "refThrottleActive": False
         }
         
         if self.reference_lap and 0.0 <= lap_dist_pct <= 1.0:
@@ -168,13 +218,75 @@ class TelemetryBridge:
             # Time delta calculation: user_lap_time - ref_lap_time at this distance
             delta_time = user_lap_time - ref_point["time"]
             
+            # Estimate track length in meters
+            lap_dist = raw_data.get("lapDist", 0.0)
+            track_length = 4000.0
+            if lap_dist_pct > 0:
+                track_length = lap_dist / lap_dist_pct
+                
+            # Compute distance to next brake/throttle points
+            current_dist = lap_dist_pct * track_length
+            dist_to_brake = 9999.0
+            dist_to_throttle = 9999.0
+            
+            if self.braking_points:
+                next_brake_dists = []
+                for pct in self.braking_points:
+                    d = pct * track_length
+                    if d > current_dist:
+                        next_brake_dists.append(d - current_dist)
+                    else:
+                        next_brake_dists.append((d + track_length) - current_dist)
+                if next_brake_dists:
+                    dist_to_brake = min(next_brake_dists)
+                    
+            if self.throttle_points:
+                next_throttle_dists = []
+                for pct in self.throttle_points:
+                    d = pct * track_length
+                    if d > current_dist:
+                        next_throttle_dists.append(d - current_dist)
+                    else:
+                        next_throttle_dists.append((d + track_length) - current_dist)
+                if next_throttle_dists:
+                    dist_to_throttle = min(next_throttle_dists)
+                    
+            # Compute lateral deviation (racing line offset)
+            lateral_deviation = 0.0
+            if "x" in ref_point and "z" in ref_point:
+                prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
+                next_ref = self.reference_lap[(ref_idx + 1) % num_points]
+                
+                heading_x = next_ref.get("x", 0.0) - prev_ref.get("x", 0.0)
+                heading_z = next_ref.get("z", 0.0) - prev_ref.get("z", 0.0)
+                length = (heading_x**2 + heading_z**2)**0.5
+                
+                if length > 0.001:
+                    heading_x /= length
+                    heading_z /= length
+                    
+                    # Right perpendicular vector: (hz, -hx)
+                    right_x = heading_z
+                    right_z = -heading_x
+                    
+                    diff_x = ref_point["x"] - user_x
+                    diff_z = ref_point["z"] - user_z
+                    
+                    # Positive if ref is to the right of user, negative if left
+                    lateral_deviation = diff_x * right_x + diff_z * right_z
+            
             comparison = {
                 "hasReference": True,
                 "refThrottle": ref_point["throttle"],
                 "refBrake": ref_point["brake"],
                 "refSpeed": ref_point["speed"] * 3.6, # Convert m/s to km/h
                 "refGear": ref_point.get("gear", 0),
-                "delta": delta_time
+                "delta": delta_time,
+                "distToBrake": dist_to_brake,
+                "distToThrottle": dist_to_throttle,
+                "lateralDeviation": lateral_deviation,
+                "refBrakeActive": ref_point["brake"] > 0.05,
+                "refThrottleActive": ref_point["throttle"] > 0.05
             }
 
         # 4. Construct final telemetry payload
@@ -250,9 +362,8 @@ class TelemetryBridge:
                         selected_lap = next((l for l in laps if l["lap_num"] == lap_num), None)
                         if selected_lap:
                             # Interpolate lap samples to standard grid
-                            self.reference_lap = interpolate_lap_data(selected_lap["samples"])
-                            self.reference_lap_num = lap_num
-                            self.reference_lap_time_str = selected_lap["lap_time_str"]
+                            interpolated = interpolate_lap_data(selected_lap["samples"])
+                            self.set_reference_lap(interpolated, lap_num, selected_lap["lap_time_str"])
                             
                             # Broadcast to all clients
                             await self.broadcast(json.dumps({
@@ -357,12 +468,11 @@ class TelemetryBridge:
                         print(f"Saved recorded lap to {full_path}")
                         
                         # Set as current reference
-                        self.reference_lap = interpolated
-                        self.reference_lap_num = "Rec"
                         minutes = int(fastest_duration // 60)
                         seconds = int(fastest_duration % 60)
                         ms = int((fastest_duration % 1) * 1000)
-                        self.reference_lap_time_str = f"{minutes:02d}:{seconds:02d}.{ms:03d}"
+                        time_str = f"{minutes:02d}:{seconds:02d}.{ms:03d}"
+                        self.set_reference_lap(interpolated, "Rec", time_str)
                         
                         await self.broadcast(json.dumps({
                             "type": "reference_loaded",
@@ -390,9 +500,7 @@ class TelemetryBridge:
                         
                 elif command == "unload_reference":
                     print("Unloading reference lap...")
-                    self.reference_lap = None
-                    self.reference_lap_num = None
-                    self.reference_lap_time_str = None
+                    self.set_reference_lap(None, None, None)
                     await self.broadcast(json.dumps({
                         "type": "reference_unloaded"
                     }))

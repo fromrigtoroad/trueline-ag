@@ -111,6 +111,13 @@ class MockTelemetryGenerator:
         else:
             self.gear = 6
             
+        # Generate world coordinates (circular track representation)
+        theta = self.lap_dist_pct * 2 * math.pi
+        radius = 636.62
+        x = radius * math.cos(theta)
+        z = radius * math.sin(theta)
+        y = 0.0
+
         return {
             "lap": self.lap,
             "lapDistPct": self.lap_dist_pct,
@@ -119,7 +126,11 @@ class MockTelemetryGenerator:
             "brake": brake,
             "speed": self.speed * 3.6,  # Convert m/s to km/h for display
             "gear": self.gear,
-            "sessionTime": self.session_time
+            "sessionTime": self.session_time,
+            "PlayerCarIdx": 0,
+            "CarIdxPosX": [x] + [0.0] * 63,
+            "CarIdxPosY": [y] + [0.0] * 63,
+            "CarIdxPosZ": [z] + [0.0] * 63
         }
 
 if __name__ == "__main__":

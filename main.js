@@ -5,6 +5,8 @@ const fs = require('fs');
 
 let mainWindow = null;
 let overlayWindow = null;
+let pedalsCoachWindow = null;
+let lineCoachWindow = null;
 let pythonProcess = null;
 
 // Determine if we are in development mode
@@ -120,6 +122,8 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     if (overlayWindow) overlayWindow.close();
+    if (pedalsCoachWindow) pedalsCoachWindow.close();
+    if (lineCoachWindow) lineCoachWindow.close();
   });
 }
 
@@ -157,6 +161,68 @@ function createOverlayWindow() {
   });
 }
 
+function createPedalsCoachWindow() {
+  pedalsCoachWindow = new BrowserWindow({
+    width: 220,
+    height: 220,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+    show: false
+  });
+
+  pedalsCoachWindow.setAspectRatio(1.0);
+
+  const url = isDev 
+    ? 'http://localhost:5173/#pedals-coach' 
+    : `file://${path.join(__dirname, 'dist', 'index.html')}#pedals-coach`;
+
+  pedalsCoachWindow.loadURL(url);
+  pedalsCoachWindow.setIgnoreMouseEvents(true, { forward: true });
+
+  pedalsCoachWindow.on('closed', () => {
+    pedalsCoachWindow = null;
+  });
+}
+
+function createLineCoachWindow() {
+  lineCoachWindow = new BrowserWindow({
+    width: 300,
+    height: 90,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    },
+    show: false
+  });
+
+  lineCoachWindow.setAspectRatio(300 / 90);
+
+  const url = isDev 
+    ? 'http://localhost:5173/#line-coach' 
+    : `file://${path.join(__dirname, 'dist', 'index.html')}#line-coach`;
+
+  lineCoachWindow.loadURL(url);
+  lineCoachWindow.setIgnoreMouseEvents(true, { forward: true });
+
+  lineCoachWindow.on('closed', () => {
+    lineCoachWindow = null;
+  });
+}
+
 // IPC Handlers
 ipcMain.handle('toggle-overlay', (event, show) => {
   if (show) {
@@ -171,15 +237,42 @@ ipcMain.handle('toggle-overlay', (event, show) => {
   }
 });
 
-ipcMain.handle('set-overlay-lock', (event, lock) => {
-  if (overlayWindow) {
-    if (lock) {
-      overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    } else {
-      // Unlocked: can click, drag, and resize the window
-      overlayWindow.setIgnoreMouseEvents(false);
+ipcMain.handle('toggle-pedals-coach', (event, show) => {
+  if (show) {
+    if (!pedalsCoachWindow) {
+      createPedalsCoachWindow();
+    }
+    pedalsCoachWindow.showInactive();
+  } else {
+    if (pedalsCoachWindow) {
+      pedalsCoachWindow.hide();
     }
   }
+});
+
+ipcMain.handle('toggle-line-coach', (event, show) => {
+  if (show) {
+    if (!lineCoachWindow) {
+      createLineCoachWindow();
+    }
+    lineCoachWindow.showInactive();
+  } else {
+    if (lineCoachWindow) {
+      lineCoachWindow.hide();
+    }
+  }
+});
+
+ipcMain.handle('set-overlay-lock', (event, lock) => {
+  [overlayWindow, pedalsCoachWindow, lineCoachWindow].forEach(win => {
+    if (win) {
+      if (lock) {
+        win.setIgnoreMouseEvents(true, { forward: true });
+      } else {
+        win.setIgnoreMouseEvents(false);
+      }
+    }
+  });
 });
 
 ipcMain.handle('open-file-dialog', async (event, filters) => {

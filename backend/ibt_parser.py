@@ -158,6 +158,33 @@ def parse_ibt_file(file_path):
         session_time = float(extract_val(record_bytes, vars_dict['SessionTime']))
         gear = int(extract_val(record_bytes, vars_dict['Gear'])) if has_gear else 0
         
+        # Extract coordinates safely
+        player_idx = int(extract_val(record_bytes, vars_dict['PlayerCarIdx'])) if 'PlayerCarIdx' in vars_dict else 0
+        x = 0.0
+        y = 0.0
+        z = 0.0
+        
+        if 'CarIdxPosX' in vars_dict:
+            x_vals = extract_val(record_bytes, vars_dict['CarIdxPosX'])
+            if isinstance(x_vals, list) and len(x_vals) > player_idx:
+                x = float(x_vals[player_idx])
+            elif not isinstance(x_vals, list) and player_idx == 0:
+                x = float(x_vals)
+                
+        if 'CarIdxPosY' in vars_dict:
+            y_vals = extract_val(record_bytes, vars_dict['CarIdxPosY'])
+            if isinstance(y_vals, list) and len(y_vals) > player_idx:
+                y = float(y_vals[player_idx])
+            elif not isinstance(y_vals, list) and player_idx == 0:
+                y = float(y_vals)
+                
+        if 'CarIdxPosZ' in vars_dict:
+            z_vals = extract_val(record_bytes, vars_dict['CarIdxPosZ'])
+            if isinstance(z_vals, list) and len(z_vals) > player_idx:
+                z = float(z_vals[player_idx])
+            elif not isinstance(z_vals, list) and player_idx == 0:
+                z = float(z_vals)
+
         if lap not in laps_raw:
             laps_raw[lap] = []
             
@@ -167,7 +194,10 @@ def parse_ibt_file(file_path):
             'throttle': throttle,
             'brake': brake,
             'speed': speed,
-            'gear': gear
+            'gear': gear,
+            'x': x,
+            'y': y,
+            'z': z
         })
 
     # 5. Process laps to find completed, valid ones
@@ -241,6 +271,9 @@ def interpolate_lap_data(samples, num_points=2000):
     speed = np.array([s['speed'] for s in samples])
     time_arr = np.array([s['time'] for s in samples])
     gear = np.array([s.get('gear', 0) for s in samples])
+    x_arr = np.array([s.get('x', 0.0) for s in samples])
+    y_arr = np.array([s.get('y', 0.0) for s in samples])
+    z_arr = np.array([s.get('z', 0.0) for s in samples])
     
     # Normalize time so the lap starts at t=0
     time_arr = time_arr - time_arr[0]
@@ -260,6 +293,9 @@ def interpolate_lap_data(samples, num_points=2000):
         speed = speed[clean_indices]
         time_arr = time_arr[clean_indices]
         gear = gear[clean_indices]
+        x_arr = x_arr[clean_indices]
+        y_arr = y_arr[clean_indices]
+        z_arr = z_arr[clean_indices]
 
     # Create target grid (0.0 to 1.0)
     target_grid = np.linspace(0.0, 1.0, num_points)
@@ -270,6 +306,9 @@ def interpolate_lap_data(samples, num_points=2000):
     interp_speed = np.interp(target_grid, dist_pct, speed)
     interp_time = np.interp(target_grid, dist_pct, time_arr)
     interp_gear = np.interp(target_grid, dist_pct, gear)
+    interp_x = np.interp(target_grid, dist_pct, x_arr)
+    interp_y = np.interp(target_grid, dist_pct, y_arr)
+    interp_z = np.interp(target_grid, dist_pct, z_arr)
     
     # Construct list of interpolated points
     interpolated_points = []
@@ -280,7 +319,10 @@ def interpolate_lap_data(samples, num_points=2000):
             'brake': float(interp_brake[i]),
             'speed': float(interp_speed[i]),
             'time': float(interp_time[i]),
-            'gear': int(round(float(interp_gear[i])))
+            'gear': int(round(float(interp_gear[i]))),
+            'x': float(interp_x[i]),
+            'y': float(interp_y[i]),
+            'z': float(interp_z[i])
         })
         
     return interpolated_points

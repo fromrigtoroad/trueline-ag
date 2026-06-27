@@ -1,6 +1,6 @@
 {
   "name": "trueline",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "TrueLine - A FromRigToRoad performance product",
   "main": "main.js",
   "scripts": {

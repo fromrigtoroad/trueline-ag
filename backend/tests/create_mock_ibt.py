@@ -12,10 +12,14 @@ def write_mock_ibt(file_path):
         ('Brake', 4, 1, 12),
         ('Speed', 4, 1, 16),
         ('SessionTime', 5, 1, 20),
-        ('Gear', 2, 1, 28)
+        ('Gear', 2, 1, 28),
+        ('PlayerCarIdx', 2, 1, 32),
+        ('CarIdxPosX', 4, 64, 36),
+        ('CarIdxPosY', 4, 64, 292),
+        ('CarIdxPosZ', 4, 64, 548)
     ]
     
-    buf_len = 32 # total frame size (4 + 4 + 4 + 4 + 4 + 8 + 4)
+    buf_len = 804 # total frame size (36 + 256 * 3)
     num_vars = len(vars_def)
     
     # Offsets layout:
@@ -132,9 +136,20 @@ def write_mock_ibt(file_path):
         else:
             gear = 3
             
-        # Pack frame bytes:
-        # Lap (int), LapDistPct (float), Throttle (float), Brake (float), Speed (float), SessionTime (double), Gear (int)
-        frame = struct.pack('<iffffdi', lap, pct, throttle, brake, speed, time_sec, gear)
+        # Generate coordinates for player
+        theta = pct * 2 * math.pi
+        radius = 636.62
+        x = radius * math.cos(theta)
+        z = radius * math.sin(theta)
+        y = 0.0
+
+        x_vals = [x] + [0.0] * 63
+        y_vals = [y] + [0.0] * 63
+        z_vals = [z] + [0.0] * 63
+        player_idx = 0
+
+        # Pack frame bytes
+        frame = struct.pack('<iffffdi i 64f 64f 64f', lap, pct, throttle, brake, speed, time_sec, gear, player_idx, *x_vals, *y_vals, *z_vals)
         file_bytes.extend(frame)
         
     # Write file to disk

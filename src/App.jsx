@@ -35,6 +35,8 @@ export default function App() {
   });
 
   const [overlayActive, setOverlayActive] = useState(false);
+  const [pedalsActive, setPedalsActive] = useState(false);
+  const [lineActive, setLineActive] = useState(false);
 
   // WebSocket reference
   const ws = useRef(null);
@@ -126,6 +128,18 @@ export default function App() {
       window.api.toggleOverlay(overlayActive);
     }
   }, [overlayActive]);
+
+  useEffect(() => {
+    if (window.api) {
+      window.api.togglePedalsCoach(pedalsActive);
+    }
+  }, [pedalsActive]);
+
+  useEffect(() => {
+    if (window.api) {
+      window.api.toggleLineCoach(lineActive);
+    }
+  }, [lineActive]);
 
   // Sync Overlay Lock setting with Electron
   useEffect(() => {
@@ -242,28 +256,74 @@ export default function App() {
         </div>
 
         {/* Overlay Controls */}
-        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>OVERLAY HUD</h3>
+        <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h3 style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>COACH OVERLAYS</h3>
           
-          <button 
-            className={`glass-button primary ${overlayActive ? 'glow-blue' : ''}`}
-            onClick={() => setOverlayActive(!overlayActive)}
-            style={{ width: '100%', justifyContent: 'center' }}
-          >
-            {overlayActive ? 'Hide Overlay HUD' : 'Show Overlay HUD'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button 
+              className={`glass-button ${overlayActive ? 'primary glow-blue' : ''}`}
+              onClick={() => setOverlayActive(!overlayActive)}
+              style={{ width: '100%', justifyContent: 'space-between', padding: '10px 14px' }}
+            >
+              <span>📊 Telemetry HUD</span>
+              <span>{overlayActive ? 'ON' : 'OFF'}</span>
+            </button>
+
+            <button 
+              className={`glass-button ${pedalsActive ? 'primary glow-blue' : ''}`}
+              onClick={() => setPedalsActive(!pedalsActive)}
+              style={{ width: '100%', justifyContent: 'space-between', padding: '10px 14px' }}
+            >
+              <span>🏁 Pedals Coach</span>
+              <span>{pedalsActive ? 'ON' : 'OFF'}</span>
+            </button>
+
+            <button 
+              className={`glass-button ${lineActive ? 'primary glow-blue' : ''}`}
+              onClick={() => setLineActive(!lineActive)}
+              style={{ width: '100%', justifyContent: 'space-between', padding: '10px 14px' }}
+            >
+              <span>🛣️ Racing Line Coach</span>
+              <span>{lineActive ? 'ON' : 'OFF'}</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+            <button 
+              className="glass-button" 
+              onClick={() => {
+                setOverlayActive(true);
+                setPedalsActive(true);
+                setLineActive(true);
+              }}
+              style={{ flex: 1, padding: '8px', justifyContent: 'center', fontSize: '12px' }}
+            >
+              Show All
+            </button>
+            <button 
+              className="glass-button" 
+              onClick={() => {
+                setOverlayActive(false);
+                setPedalsActive(false);
+                setLineActive(false);
+              }}
+              style={{ flex: 1, padding: '8px', justifyContent: 'center', fontSize: '12px', color: 'var(--neon-red)' }}
+            >
+              Hide All
+            </button>
+          </div>
 
           <button 
             className="glass-button" 
             onClick={() => updateSettings({ locked: !settings.locked })}
-            style={{ width: '100%', justifyContent: 'center', borderColor: settings.locked ? 'var(--border-color)' : 'var(--neon-purple)' }}
+            style={{ width: '100%', justifyContent: 'center', borderColor: settings.locked ? 'var(--border-color)' : 'var(--neon-purple)', marginTop: '4px' }}
           >
             {settings.locked ? '🔒 Locked (Click-Through)' : '🔓 Unlocked (Drag / Size)'}
           </button>
 
           <div>
             <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '8px' }}>
-              DISPLAY STYLE
+              HUD DISPLAY STYLE
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button 

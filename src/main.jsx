@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import Overlay from './Overlay.jsx';
+import PedalsCoachOverlay from './PedalsCoachOverlay.jsx';
+import LineCoachOverlay from './LineCoachOverlay.jsx';
 import './index.css';
 
 function Root() {
@@ -21,6 +23,10 @@ function Root() {
   // Dispatch based on URL hash
   if (currentRoute.includes('#overlay')) {
     return <Overlay />;
+  } else if (currentRoute.includes('#pedals-coach')) {
+    return <PedalsCoachOverlay />;
+  } else if (currentRoute.includes('#line-coach')) {
+    return <LineCoachOverlay />;
   } else {
     return <App />;
   }
