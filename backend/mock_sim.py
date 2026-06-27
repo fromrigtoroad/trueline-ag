@@ -113,9 +113,12 @@ class MockTelemetryGenerator:
             
         # Generate world coordinates (circular track representation)
         theta = self.lap_dist_pct * 2 * math.pi
-        radius = 636.62
-        x = radius * math.cos(theta)
-        z = radius * math.sin(theta)
+        # Reference is a perfect circle of radius 636.62m
+        # User wanders slightly (inner and outer) compared to the reference track
+        # to simulate a non-zero racing line lateral offset
+        user_radius = 636.62 + 3.0 * math.sin(theta * 6)
+        x = user_radius * math.cos(theta)
+        z = user_radius * math.sin(theta)
         y = 0.0
 
         return {

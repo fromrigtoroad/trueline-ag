@@ -32,6 +32,7 @@ class TelemetryBridge:
         self.reference_lap_time_str = None
         self.braking_points = []
         self.throttle_points = []
+        self.shift_points = []
         
         # Recording state
         self.is_recording = False
@@ -51,6 +52,7 @@ class TelemetryBridge:
         self.reference_lap_time_str = lap_time_str
         self.braking_points = []
         self.throttle_points = []
+        self.shift_points = []
         
         if not interpolated:
             return
@@ -67,6 +69,14 @@ class TelemetryBridge:
             # Throttle starts: rises above 5%
             if curr.get('throttle', 0.0) > 0.05 and prev.get('throttle', 0.0) <= 0.05:
                 self.throttle_points.append(curr['pct'])
+                
+            # Gear changes (skip index 0 to avoid wrap-around fake shifts at start/finish line)
+            if i > 0:
+                curr_gear = curr.get('gear', 0)
+                prev_gear = prev.get('gear', 0)
+                if curr_gear != prev_gear and curr_gear in [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8] and prev_gear in [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8]:
+                    shift_type = 'up' if curr_gear > prev_gear else 'down'
+                    self.shift_points.append((curr['pct'], shift_type))
 
     def init_irsdk(self):
         """
@@ -204,6 +214,8 @@ class TelemetryBridge:
             "hasReference": False,
             "distToBrake": 9999.0,
             "distToThrottle": 9999.0,
+            "distToShift": 9999.0,
+            "shiftType": "",
             "lateralDeviation": 0.0,
             "refBrakeActive": False,
             "refThrottleActive": False
@@ -275,6 +287,22 @@ class TelemetryBridge:
                     # Positive if ref is to the right of user, negative if left
                     lateral_deviation = diff_x * right_x + diff_z * right_z
             
+            # Compute distance to next gear shift
+            dist_to_shift = 9999.0
+            shift_type = ""
+            if self.shift_points:
+                next_shift_dists = []
+                for pct, s_type in self.shift_points:
+                    d = pct * track_length
+                    if d > current_dist:
+                        next_shift_dists.append((d - current_dist, s_type))
+                    else:
+                        next_shift_dists.append(((d + track_length) - current_dist, s_type))
+                if next_shift_dists:
+                    closest_dist, closest_type = min(next_shift_dists, key=lambda x: x[0])
+                    dist_to_shift = closest_dist
+                    shift_type = closest_type
+
             comparison = {
                 "hasReference": True,
                 "refThrottle": ref_point["throttle"],
@@ -284,6 +312,8 @@ class TelemetryBridge:
                 "delta": delta_time,
                 "distToBrake": dist_to_brake,
                 "distToThrottle": dist_to_throttle,
+                "distToShift": dist_to_shift,
+                "shiftType": shift_type,
                 "lateralDeviation": lateral_deviation,
                 "refBrakeActive": ref_point["brake"] > 0.05,
                 "refThrottleActive": ref_point["throttle"] > 0.05

@@ -119,6 +119,19 @@ export default function PedalsCoachOverlay() {
   const showThrottle = hasRef && (distToThrottle <= maxThrottleDist || userBrakeActive || refBrakeActive) && !userThrottleActive && !refThrottleActive;
   const throttlePct = showThrottle ? Math.min(100, (distToThrottle / maxThrottleDist) * 100) : 0;
 
+  const distToShift = telemetry ? telemetry.distToShift : 9999.0;
+  const shiftType = telemetry ? telemetry.shiftType : '';
+  const showShift = hasRef && distToShift <= 50.0;
+  
+  let shiftPct = 0;
+  if (showShift) {
+    if (shiftType === 'up') {
+      shiftPct = (1 - distToShift / 50.0) * 100;
+    } else {
+      shiftPct = (distToShift / 50.0) * 100;
+    }
+  }
+
   const containerClass = `overlay-container ${!settings.locked ? 'unlocked-active' : ''}`;
 
   return (
@@ -183,7 +196,7 @@ export default function PedalsCoachOverlay() {
               NO REF LAP LOADED
             </div>
           ) : (
-            <div style={{ display: 'flex', width: '100%', height: '100%', gap: '16px' }}>
+            <div style={{ display: 'flex', width: '100%', height: '100%', gap: '10px' }}>
               {/* Brake Coach Bar */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
@@ -275,6 +288,57 @@ export default function PedalsCoachOverlay() {
                         </span>
                         <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.6)', textShadow: '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
                       </>
+                    ) : (
+                      <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>---</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Gear Coach Bar */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                  GEAR COACH
+                </span>
+                
+                <div style={{ flex: 1, width: '100%', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: `${shiftPct}%`,
+                    backgroundColor: '#8b5cf6',
+                    boxShadow: '0 0 8px rgba(139, 92, 246, 0.8)',
+                    transition: 'height 0.05s ease-out'
+                  }} />
+                  
+                  {/* Status Overlay text */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10
+                  }}>
+                    {showShift ? (
+                      distToShift <= 3.0 ? (
+                        <span className="num-mono" style={{ fontSize: '15px', fontWeight: '800', color: '#ffffff', textShadow: '0 0 8px rgba(139, 92, 246, 0.8)', letterSpacing: '1px' }}>
+                          SHIFT!
+                        </span>
+                      ) : (
+                        <>
+                          <span className="num-mono" style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', textShadow: '1px 1px 3px black' }}>
+                            {shiftType === 'up' ? '▲' : '▼'} {Math.round(distToShift)}
+                          </span>
+                          <span style={{ fontSize: '7px', color: 'rgba(255,255,255,0.6)', textShadow: '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
+                        </>
+                      )
                     ) : (
                       <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>---</span>
                     )}
