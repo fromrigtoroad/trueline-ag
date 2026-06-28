@@ -79,6 +79,18 @@ class TelemetryBridge:
                     shift_type = 'up' if curr_gear > prev_gear else 'down'
                     self.shift_points.append((curr['pct'], shift_type))
 
+    def get_safe_val(self, key, default=0.0):
+        """
+        Safely reads a telemetry variable from the IRSDK wrapper, returning a default value if missing.
+        """
+        if self.use_mock or not self.ir:
+            return default
+        try:
+            val = self.ir[key]
+            return val if val is not None else default
+        except Exception:
+            return default
+
     def init_irsdk(self):
         """
         Initializes connection to the live iRacing SDK.
@@ -148,9 +160,9 @@ class TelemetryBridge:
                         "speed": self.ir["Speed"] * 3.6,  # Convert m/s to km/h
                         "gear": self.ir["Gear"],
                         "sessionTime": self.ir["SessionTime"],
-                        "Lat": self.ir.get("Lat") if self.ir.get("Lat") is not None else 0.0,
-                        "Lon": self.ir.get("Lon") if self.ir.get("Lon") is not None else 0.0,
-                        "Alt": self.ir.get("Alt") if self.ir.get("Alt") is not None else 0.0
+                        "Lat": self.get_safe_val("Lat", 0.0),
+                        "Lon": self.get_safe_val("Lon", 0.0),
+                        "Alt": self.get_safe_val("Alt", 0.0)
                     }
                 except Exception as e:
                     print(f"Error reading telemetry: {e}")
@@ -191,12 +203,9 @@ class TelemetryBridge:
             user_lon = raw_data.get("Lon", 0.0)
             user_alt = raw_data.get("Alt", 0.0)
         else:
-            try:
-                user_lat = self.ir["Lat"]
-                user_lon = self.ir["Lon"]
-                user_alt = self.ir["Alt"]
-            except Exception:
-                pass
+            user_lat = self.get_safe_val("Lat", 0.0)
+            user_lon = self.get_safe_val("Lon", 0.0)
+            user_alt = self.get_safe_val("Alt", 0.0)
 
         # 2. Record tick if enabled
         if self.is_recording:
