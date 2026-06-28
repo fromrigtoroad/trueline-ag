@@ -148,9 +148,9 @@ class TelemetryBridge:
                         "speed": self.ir["Speed"] * 3.6,  # Convert m/s to km/h
                         "gear": self.ir["Gear"],
                         "sessionTime": self.ir["SessionTime"],
-                        "Lat": self.ir["Lat"] if self.ir["Lat"] is not None else 0.0,
-                        "Lon": self.ir["Lon"] if self.ir["Lon"] is not None else 0.0,
-                        "Alt": self.ir["Alt"] if self.ir["Alt"] is not None else 0.0
+                        "Lat": self.ir.get("Lat") if self.ir.get("Lat") is not None else 0.0,
+                        "Lon": self.ir.get("Lon") if self.ir.get("Lon") is not None else 0.0,
+                        "Alt": self.ir.get("Alt") if self.ir.get("Alt") is not None else 0.0
                     }
                 except Exception as e:
                     print(f"Error reading telemetry: {e}")
