@@ -5,8 +5,23 @@ import sys
 import math
 import traceback
 import websockets
+import logging
 from mock_sim import MockTelemetryGenerator
 from ibt_parser import parse_ibt_file, interpolate_lap_data
+
+# Configure file logging next to the executing script/executable
+try:
+    log_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    log_path = os.path.join(log_dir, "bridge.log")
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        filemode="w"
+    )
+    logging.info("Bridge Logging Initialized.")
+except Exception as log_err:
+    print(f"Failed to configure logging: {log_err}")
 
 # Attempt to import pyirsdk. It might fail on non-Windows environments.
 try:
@@ -270,8 +285,33 @@ class TelemetryBridge:
                     user_x = pos_x_arr[player_idx]
                 if pos_z_arr and len(pos_z_arr) > player_idx:
                     user_z = pos_z_arr[player_idx]
-            except Exception:
-                pass
+            except Exception as e:
+                # Log coordinate extraction errors
+                if not hasattr(self, "_last_coord_err_log") or self.tick_counter % 300 == 0:
+                    logging.error(f"Error reading CarIdxPosX/PosZ: {e}")
+                    self._last_coord_err_log = True
+
+        # Debug logging loop diagnostics
+        if not hasattr(self, "tick_counter"):
+            self.tick_counter = 0
+        self.tick_counter += 1
+        
+        if self.tick_counter % 300 == 0:
+            try:
+                logging.info(f"Tick {self.tick_counter}: ir_connected={self.ir_connected}, use_mock={self.use_mock}")
+                if self.ir:
+                    pos_x = self.get_safe_val("CarIdxPosX", None)
+                    pos_z = self.get_safe_val("CarIdxPosZ", None)
+                    logging.info(f"SDK Variables: PlayerCarIdx={player_idx}, Lat={user_lat}, Lon={user_lon}")
+                    logging.info(f"Live coordinates: user_x={user_x:.2f}, user_z={user_z:.2f}")
+                    if pos_x is not None:
+                        logging.info(f"CarIdxPosX size={len(pos_x) if hasattr(pos_x, '__len__') else 'not_len'}, type={type(pos_x)}")
+                    else:
+                        logging.info("CarIdxPosX is None!")
+                if self.reference_lap:
+                    logging.info(f"Reference Lap loaded: {len(self.reference_lap)} points. Aligned: {self.aligned}, theta={self.align_theta:.4f}, dx={self.align_dx:.1f}, dz={self.align_dz:.1f}, buffer={len(self.align_live_pts)}")
+            except Exception as log_ex:
+                print(f"Error writing to bridge.log: {log_ex}")
 
         # 2. Record tick if enabled
         if self.is_recording:
