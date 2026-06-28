@@ -115,6 +115,10 @@ function createMainWindow() {
 
   mainWindow.loadURL(mainUrl);
   
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`[Dashboard Console]: ${message}`);
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -153,6 +157,10 @@ function createOverlayWindow() {
 
   overlayWindow.loadURL(overlayUrl);
 
+  overlayWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`[HUD Console]: ${message}`);
+  });
+
   // Default to click-through locked
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
@@ -185,6 +193,10 @@ function createPedalsCoachWindow() {
     : `file://${path.join(__dirname, 'dist', 'index.html')}#pedals-coach`;
 
   pedalsCoachWindow.loadURL(url);
+  pedalsCoachWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`[Pedals Console]: ${message}`);
+  });
+
   pedalsCoachWindow.setIgnoreMouseEvents(true, { forward: true });
 
   pedalsCoachWindow.on('closed', () => {
@@ -216,6 +228,10 @@ function createLineCoachWindow() {
     : `file://${path.join(__dirname, 'dist', 'index.html')}#line-coach`;
 
   lineCoachWindow.loadURL(url);
+  lineCoachWindow.webContents.on('console-message', (event, level, message) => {
+    console.log(`[Line Console]: ${message}`);
+  });
+
   lineCoachWindow.setIgnoreMouseEvents(true, { forward: true });
 
   lineCoachWindow.on('closed', () => {
