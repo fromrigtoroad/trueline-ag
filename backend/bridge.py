@@ -152,6 +152,11 @@ class TelemetryBridge:
             # Check if game is running and connected
             if self.ir.startup():
                 self.ir_connected = True
+                try:
+                    var_names = [var.name for var in self.ir.telemetry_vars]
+                    logging.info(f"Available telemetry variables ({len(var_names)}): " + ", ".join(var_names))
+                except Exception as log_err:
+                    logging.error(f"Failed to log telemetry variables: {log_err}")
             else:
                 self.ir_connected = False
         except Exception as e:
