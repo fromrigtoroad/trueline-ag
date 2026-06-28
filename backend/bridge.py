@@ -9,9 +9,9 @@ import logging
 from mock_sim import MockTelemetryGenerator
 from ibt_parser import parse_ibt_file, interpolate_lap_data
 
-# Configure file logging next to the executing script/executable
+# Configure file logging in the user home directory
 try:
-    log_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    log_dir = os.path.expanduser("~")
     log_path = os.path.join(log_dir, "bridge.log")
     logging.basicConfig(
         filename=log_path,
@@ -19,7 +19,7 @@ try:
         format="%(asctime)s [%(levelname)s] %(message)s",
         filemode="w"
     )
-    logging.info("Bridge Logging Initialized.")
+    logging.info(f"Bridge Logging Initialized at: {log_path}")
 except Exception as log_err:
     print(f"Failed to configure logging: {log_err}")
 
