@@ -121,6 +121,15 @@ class MockTelemetryGenerator:
         z = user_radius * math.sin(theta)
         y = 0.0
 
+        # Convert to GPS degrees
+        R_earth = 6371000.0
+        lat_origin = 43.9975 * math.pi / 180.0
+        lon_origin = 11.3719 * math.pi / 180.0
+        
+        lat = (lat_origin + z / R_earth) * 180.0 / math.pi
+        lon = (lon_origin + x / (R_earth * math.cos(lat_origin))) * 180.0 / math.pi
+        alt = 280.0
+
         return {
             "lap": self.lap,
             "lapDistPct": self.lap_dist_pct,
@@ -130,10 +139,9 @@ class MockTelemetryGenerator:
             "speed": self.speed * 3.6,  # Convert m/s to km/h for display
             "gear": self.gear,
             "sessionTime": self.session_time,
-            "PlayerCarIdx": 0,
-            "CarIdxPosX": [x] + [0.0] * 63,
-            "CarIdxPosY": [y] + [0.0] * 63,
-            "CarIdxPosZ": [z] + [0.0] * 63
+            "Lat": lat,
+            "Lon": lon,
+            "Alt": alt
         }
 
 if __name__ == "__main__":

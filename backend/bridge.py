@@ -146,7 +146,10 @@ class TelemetryBridge:
                         "brake": self.ir["Brake"],
                         "speed": self.ir["Speed"] * 3.6,  # Convert m/s to km/h
                         "gear": self.ir["Gear"],
-                        "sessionTime": self.ir["SessionTime"]
+                        "sessionTime": self.ir["SessionTime"],
+                        "Lat": self.ir["Lat"] if self.ir["Lat"] is not None else 0.0,
+                        "Lon": self.ir["Lon"] if self.ir["Lon"] is not None else 0.0,
+                        "Alt": self.ir["Alt"] if self.ir["Alt"] is not None else 0.0
                     }
                 except Exception as e:
                     print(f"Error reading telemetry: {e}")
@@ -178,20 +181,19 @@ class TelemetryBridge:
                 
         user_lap_time = session_time - self.lap_start_time
 
-        # Safely get coordinates for player
-        user_x = 0.0
-        user_y = 0.0
-        user_z = 0.0
+        # Safely get GPS coordinates for player
+        user_lat = 0.0
+        user_lon = 0.0
+        user_alt = 0.0
         if self.use_mock:
-            user_x = raw_data.get("CarIdxPosX", [0.0])[0]
-            user_y = raw_data.get("CarIdxPosY", [0.0])[0]
-            user_z = raw_data.get("CarIdxPosZ", [0.0])[0]
+            user_lat = raw_data.get("Lat", 0.0)
+            user_lon = raw_data.get("Lon", 0.0)
+            user_alt = raw_data.get("Alt", 0.0)
         else:
-            player_idx = raw_data.get("PlayerCarIdx", 0)
             try:
-                user_x = self.ir["CarIdxPosX"][player_idx]
-                user_y = self.ir["CarIdxPosY"][player_idx]
-                user_z = self.ir["CarIdxPosZ"][player_idx]
+                user_lat = self.ir["Lat"]
+                user_lon = self.ir["Lon"]
+                user_alt = self.ir["Alt"]
             except Exception:
                 pass
 
@@ -204,9 +206,9 @@ class TelemetryBridge:
                 "brake": raw_data["brake"],
                 "speed": raw_data["speed"] / 3.6,  # store in m/s
                 "gear": raw_data["gear"],
-                "x": user_x,
-                "y": user_y,
-                "z": user_z
+                "lat": user_lat,
+                "lon": user_lon,
+                "alt": user_alt
             })
 
         # 3. Calculate comparison telemetry if reference is loaded
@@ -263,14 +265,45 @@ class TelemetryBridge:
                 if next_throttle_dists:
                     dist_to_throttle = min(next_throttle_dists)
                     
-            # Compute lateral deviation (racing line offset)
+            # Compute lateral deviation (racing line offset) using Lat/Lon coordinates
             lateral_deviation = 0.0
-            if "x" in ref_point and "z" in ref_point:
+            if "lat" in ref_point and "lon" in ref_point:
+                # Earth radius in meters
+                R_earth = 6371000.0
+                
+                # Convert reference and user Lat/Lon from degrees to radians
+                lat_ref_rad = ref_point["lat"] * math.pi / 180.0
+                lon_ref_rad = ref_point["lon"] * math.pi / 180.0
+                
+                lat_user_rad = user_lat * math.pi / 180.0
+                lon_user_rad = user_lon * math.pi / 180.0
+                
+                cos_lat = math.cos(lat_ref_rad)
+                
+                ref_x = lon_ref_rad * R_earth * cos_lat
+                ref_z = lat_ref_rad * R_earth
+                
+                user_x = lon_user_rad * R_earth * cos_lat
+                user_z = lat_user_rad * R_earth
+                
+                # Get heading direction vector of reference lap using adjacent points
                 prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
                 next_ref = self.reference_lap[(ref_idx + 1) % num_points]
                 
-                heading_x = next_ref.get("x", 0.0) - prev_ref.get("x", 0.0)
-                heading_z = next_ref.get("z", 0.0) - prev_ref.get("z", 0.0)
+                prev_lat_rad = prev_ref.get("lat", ref_point["lat"]) * math.pi / 180.0
+                prev_lon_rad = prev_ref.get("lon", 0.0) * math.pi / 180.0
+                
+                next_lat_rad = next_ref.get("lat", ref_point["lat"]) * math.pi / 180.0
+                next_lon_rad = next_ref.get("lon", 0.0) * math.pi / 180.0
+                
+                prev_x = prev_lon_rad * R_earth * math.cos(prev_lat_rad)
+                prev_z = prev_lat_rad * R_earth
+                
+                next_x = next_lon_rad * R_earth * math.cos(next_lat_rad)
+                next_z = next_lat_rad * R_earth
+                
+                heading_x = next_x - prev_x
+                heading_z = next_z - prev_z
                 length = (heading_x**2 + heading_z**2)**0.5
                 
                 if length > 0.001:
@@ -281,8 +314,8 @@ class TelemetryBridge:
                     right_x = heading_z
                     right_z = -heading_x
                     
-                    diff_x = ref_point["x"] - user_x
-                    diff_z = ref_point["z"] - user_z
+                    diff_x = ref_x - user_x
+                    diff_z = ref_z - user_z
                     
                     # Positive if ref is to the right of user, negative if left
                     lateral_deviation = diff_x * right_x + diff_z * right_z
