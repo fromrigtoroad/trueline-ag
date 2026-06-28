@@ -145,8 +145,8 @@ def write_mock_ibt(file_path):
         lat_origin = 43.9975 * math.pi / 180.0
         lon_origin = 11.3719 * math.pi / 180.0
         
-        lat = lat_origin + z / R_earth
-        lon = lon_origin + x / (R_earth * math.cos(lat_origin))
+        lat = (lat_origin + z / R_earth) * 180.0 / math.pi
+        lon = (lon_origin + x / (R_earth * math.cos(lat_origin))) * 180.0 / math.pi
 
         # Pack frame bytes
         frame = struct.pack('<iffffdi d d', lap, pct, throttle, brake, speed, time_sec, gear, lat, lon)

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sys
+import math
 import traceback
 import websockets
 from mock_sim import MockTelemetryGenerator
