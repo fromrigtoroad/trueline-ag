@@ -39,12 +39,19 @@ class TelemetryBridge:
         self.is_recording = False
         self.recorded_ticks = []
         
-        # Lap timing variables
+        # Alignment state for GPS -> Live world-space coordinates
+        self.align_live_pts = [] # list of (x, z)
+        self.align_ref_pts = []  # list of (x, z)
+        self.align_theta = 0.0
+        self.align_dx = 0.0
+        self.align_dz = 0.0
+        self.aligned = False
+        
+        # Timing state
         self.last_lap = -1
         self.lap_start_time = 0.0
         
         # Cache for parsed IBT files
-        # key: file_path, value: list of lap dicts
         self.parsed_ibt_cache = {}
 
     def set_reference_lap(self, interpolated, lap_num, lap_time_str):
@@ -55,9 +62,33 @@ class TelemetryBridge:
         self.throttle_points = []
         self.shift_points = []
         
+        # Reset alignment state
+        self.align_live_pts = []
+        self.align_ref_pts = []
+        self.align_theta = 0.0
+        self.align_dx = 0.0
+        self.align_dz = 0.0
+        self.aligned = False
+        
         if not interpolated:
             return
             
+        # Calculate metric x_metric, z_metric for all samples using the first valid point as origin
+        R_earth = 6371000.0
+        first_valid = next((s for s in interpolated if s.get("lat") is not None and s.get("lon") is not None), None)
+        if first_valid:
+            lat_origin = first_valid["lat"]
+            lon_origin = first_valid["lon"]
+            lat_origin_rad = lat_origin * math.pi / 180.0
+            lon_origin_rad = lon_origin * math.pi / 180.0
+            cos_lat = math.cos(lat_origin_rad)
+            
+            for s in interpolated:
+                lat_rad = s.get("lat", 0.0) * math.pi / 180.0
+                lon_rad = s.get("lon", 0.0) * math.pi / 180.0
+                s["x_metric"] = (lon_rad - lon_origin_rad) * R_earth * cos_lat
+                s["z_metric"] = (lat_rad - lat_origin_rad) * R_earth
+        
         num_points = len(interpolated)
         for i in range(num_points):
             curr = interpolated[i]
@@ -207,6 +238,41 @@ class TelemetryBridge:
             user_lon = self.get_safe_val("Lon", 0.0)
             user_alt = self.get_safe_val("Alt", 0.0)
 
+        # Extract live metric coordinates (CarIdxPosX / CarIdxPosZ)
+        user_x = 0.0
+        user_z = 0.0
+        player_idx = int(self.get_safe_val("PlayerCarIdx", 0))
+        
+        if self.use_mock:
+            if self.reference_lap:
+                R_earth = 6371000.0
+                first_valid = next((s for s in self.reference_lap if s.get("lat") is not None and s.get("lon") is not None), None)
+                if first_valid:
+                    lat_origin_rad = first_valid["lat"] * math.pi / 180.0
+                    lon_origin_rad = first_valid["lon"] * math.pi / 180.0
+                    cos_lat = math.cos(lat_origin_rad)
+                    
+                    user_lat_rad = user_lat * math.pi / 180.0
+                    user_lon_rad = user_lon * math.pi / 180.0
+                    user_x = (user_lon_rad - lon_origin_rad) * R_earth * cos_lat
+                    user_z = (user_lat_rad - lat_origin_rad) * R_earth
+                    
+                    # For mock, alignment is 1:1 Identity
+                    self.align_theta = 0.0
+                    self.align_dx = 0.0
+                    self.align_dz = 0.0
+                    self.aligned = True
+        else:
+            try:
+                pos_x_arr = self.ir["CarIdxPosX"]
+                pos_z_arr = self.ir["CarIdxPosZ"]
+                if pos_x_arr and len(pos_x_arr) > player_idx:
+                    user_x = pos_x_arr[player_idx]
+                if pos_z_arr and len(pos_z_arr) > player_idx:
+                    user_z = pos_z_arr[player_idx]
+            except Exception:
+                pass
+
         # 2. Record tick if enabled
         if self.is_recording:
             self.recorded_ticks.append({
@@ -275,45 +341,75 @@ class TelemetryBridge:
                 if next_throttle_dists:
                     dist_to_throttle = min(next_throttle_dists)
                     
-            # Compute lateral deviation (racing line offset) using Lat/Lon coordinates
+            # Compute lateral deviation (racing line offset) using self-calibrating projected coordinates
             lateral_deviation = 0.0
-            if "lat" in ref_point and "lon" in ref_point:
-                # Earth radius in meters
-                R_earth = 6371000.0
+            
+            ref_x_metric = ref_point.get("x_metric", 0.0)
+            ref_z_metric = ref_point.get("z_metric", 0.0)
+            
+            is_driving = raw_data.get("speed", 0.0) > 10.0
+            
+            if is_driving and user_x != 0.0 and user_z != 0.0:
+                self.align_live_pts.append((user_x, user_z))
+                self.align_ref_pts.append((ref_x_metric, ref_z_metric))
                 
-                # Convert reference and user Lat/Lon from degrees to radians
-                lat_ref_rad = ref_point["lat"] * math.pi / 180.0
-                lon_ref_rad = ref_point["lon"] * math.pi / 180.0
+                # Keep sliding window of 180 points (approx 3 seconds of driving data)
+                if len(self.align_live_pts) > 180:
+                    self.align_live_pts.pop(0)
+                    self.align_ref_pts.pop(0)
+                    
+                # Calculate span of points to ensure we are moving and have heading diversity
+                first_pt = self.align_live_pts[0]
+                last_pt = self.align_live_pts[-1]
+                span = ((last_pt[0] - first_pt[0])**2 + (last_pt[1] - first_pt[1])**2)**0.5
                 
-                lat_user_rad = user_lat * math.pi / 180.0
-                lon_user_rad = user_lon * math.pi / 180.0
+                if len(self.align_live_pts) >= 10 and span > 20.0:
+                    N = len(self.align_live_pts)
+                    mean_x_live = sum(p[0] for p in self.align_live_pts) / N
+                    mean_z_live = sum(p[1] for p in self.align_live_pts) / N
+                    mean_x_ref = sum(p[0] for p in self.align_ref_pts) / N
+                    mean_z_ref = sum(p[1] for p in self.align_ref_pts) / N
+                    
+                    A = 0.0
+                    B = 0.0
+                    for j in range(N):
+                        x_l_c = self.align_live_pts[j][0] - mean_x_live
+                        z_l_c = self.align_live_pts[j][1] - mean_z_live
+                        x_r_c = self.align_ref_pts[j][0] - mean_x_ref
+                        z_r_c = self.align_ref_pts[j][1] - mean_z_ref
+                        
+                        A += x_l_c * x_r_c + z_l_c * z_r_c
+                        B += x_l_c * z_r_c - z_l_c * x_r_c
+                        
+                    self.align_theta = math.atan2(B, A)
+                    self.align_dx = mean_x_live - (mean_x_ref * math.cos(self.align_theta) - mean_z_ref * math.sin(self.align_theta))
+                    self.align_dz = mean_z_live - (mean_x_ref * math.sin(self.align_theta) + mean_z_ref * math.cos(self.align_theta))
+                    self.aligned = True
+
+            if self.aligned and user_x != 0.0 and user_z != 0.0:
+                cos_t = math.cos(self.align_theta)
+                sin_t = math.sin(self.align_theta)
                 
-                cos_lat = math.cos(lat_ref_rad)
+                # Project current reference point
+                ref_x_proj = ref_x_metric * cos_t - ref_z_metric * sin_t + self.align_dx
+                ref_z_proj = ref_x_metric * sin_t + ref_z_metric * cos_t + self.align_dz
                 
-                ref_x = lon_ref_rad * R_earth * cos_lat
-                ref_z = lat_ref_rad * R_earth
-                
-                user_x = lon_user_rad * R_earth * cos_lat
-                user_z = lat_user_rad * R_earth
-                
-                # Get heading direction vector of reference lap using adjacent points
+                # Project adjacent reference points to compute heading vector
                 prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
                 next_ref = self.reference_lap[(ref_idx + 1) % num_points]
                 
-                prev_lat_rad = prev_ref.get("lat", ref_point["lat"]) * math.pi / 180.0
-                prev_lon_rad = prev_ref.get("lon", 0.0) * math.pi / 180.0
+                prev_x_metric = prev_ref.get("x_metric", ref_x_metric)
+                prev_z_metric = prev_ref.get("z_metric", ref_z_metric)
+                next_x_metric = next_ref.get("x_metric", ref_x_metric)
+                next_z_metric = next_ref.get("z_metric", ref_z_metric)
                 
-                next_lat_rad = next_ref.get("lat", ref_point["lat"]) * math.pi / 180.0
-                next_lon_rad = next_ref.get("lon", 0.0) * math.pi / 180.0
+                prev_x_proj = prev_x_metric * cos_t - prev_z_metric * sin_t + self.align_dx
+                prev_z_proj = prev_x_metric * sin_t + prev_z_metric * cos_t + self.align_dz
+                next_x_proj = next_x_metric * cos_t - next_z_metric * sin_t + self.align_dx
+                next_z_proj = next_x_metric * sin_t + next_z_metric * cos_t + self.align_dz
                 
-                prev_x = prev_lon_rad * R_earth * math.cos(prev_lat_rad)
-                prev_z = prev_lat_rad * R_earth
-                
-                next_x = next_lon_rad * R_earth * math.cos(next_lat_rad)
-                next_z = next_lat_rad * R_earth
-                
-                heading_x = next_x - prev_x
-                heading_z = next_z - prev_z
+                heading_x = next_x_proj - prev_x_proj
+                heading_z = next_z_proj - prev_z_proj
                 length = (heading_x**2 + heading_z**2)**0.5
                 
                 if length > 0.001:
@@ -324,10 +420,10 @@ class TelemetryBridge:
                     right_x = heading_z
                     right_z = -heading_x
                     
-                    diff_x = ref_x - user_x
-                    diff_z = ref_z - user_z
+                    diff_x = ref_x_proj - user_x
+                    diff_z = ref_z_proj - user_z
                     
-                    # Positive if ref is to the right of user, negative if left
+                    # Positive if reference is to the right of user, negative if left
                     lateral_deviation = diff_x * right_x + diff_z * right_z
             
             # Compute distance to next gear shift

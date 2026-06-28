@@ -104,11 +104,16 @@ export default function LineCoachOverlay() {
   const hasRef = telemetry && telemetry.hasReference;
   const dev = telemetry ? telemetry.lateralDeviation : 0.0;
   
+  // Center line is the reference line.
+  // Positive playerDev means player is to the right of the reference line (ref is to the left, dev < 0).
+  // Negative playerDev means player is to the left of the reference line (ref is to the right, dev > 0).
+  const playerDev = -dev;
+  
   // Scale deviation to percentage (cap at 3.0 meters max deviation)
   const maxDev = 3.0;
-  const devPct = Math.min(100, Math.max(-100, (dev / maxDev) * 100));
+  const devPct = Math.min(100, Math.max(-100, (playerDev / maxDev) * 100));
   
-  // Bar layout math
+  // Bar layout math: grows to the right if player is to the right, to the left if player is to the left
   const barLeft = devPct >= 0 ? '50%' : `calc(50% + ${devPct}%)`;
   const barWidth = `${Math.abs(devPct)}%`;
   
