@@ -25,6 +25,21 @@
   --neon-blue-glow: rgba(59, 130, 246, 0.4);
   --neon-purple: #8b5cf6;     /* Delta / Record */
   --neon-purple-glow: rgba(139, 92, 246, 0.4);
+  --bg-grid: radial-gradient(circle at 70% 30%, rgba(26, 32, 46, 0.5) 0%, rgba(9, 11, 14, 1) 100%);
+  --bg-sidebar: rgba(12, 15, 18, 0.5);
+}
+
+body.light-theme {
+  --bg-app: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.65);
+  --bg-card-hover: rgba(255, 255, 255, 0.85);
+  --border-color: rgba(15, 23, 42, 0.08);
+  --border-color-hover: rgba(15, 23, 42, 0.16);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --bg-grid: radial-gradient(circle at 70% 30%, #f8fafc 0%, #cbd5e1 100%);
+  --bg-sidebar: rgba(255, 255, 255, 0.45);
 }
 
 * {
@@ -175,7 +190,7 @@ body {
   display: grid;
   grid-template-columns: 320px 1fr;
   height: 100vh;
-  background: radial-gradient(circle at 70% 30%, rgba(26, 32, 46, 0.5) 0%, rgba(9, 11, 14, 1) 100%);
+  background: var(--bg-grid);
 }
 
 .dashboard-sidebar {
@@ -184,7 +199,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  background: rgba(12, 15, 18, 0.5);
+  background: var(--bg-sidebar);
   backdrop-filter: blur(10px);
 }
 

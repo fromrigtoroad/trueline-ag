@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const DEFAULT_SETTINGS = {
   mode: 'bars', // 'bars' | 'chart'
-  opacity: 0.9,
-  scale: 1.0,
+  hudOpacity: 0.9,
+  hudScale: 1.0,
+  hudBgOpacity: 0.35,
   throttleColor: '#10b981',
   brakeColor: '#ef4444',
-  locked: true
+  locked: true,
+  bgTheme: 'dark' // 'dark' | 'light'
 };
 
 export default function Overlay() {
@@ -24,6 +26,7 @@ export default function Overlay() {
 
   // Sync settings via storage event
   useEffect(() => {
+    document.body.style.backgroundColor = 'transparent';
     const handleStorageChange = () => {
       const saved = localStorage.getItem('overlay_settings');
       if (saved) {
@@ -55,14 +58,30 @@ export default function Overlay() {
   const scaleX = dimensions.width / baseWidth;
   const scaleY = dimensions.height / baseHeight;
   const scaleFactor = Math.min(scaleX, scaleY);
-  const totalScale = scaleFactor * settings.scale;
+  const isSynced = settings.syncSettings !== false;
+  const totalScale = scaleFactor * (isSynced ? (settings.scale ?? 1.0) : (settings.hudScale ?? 1.0));
+
+  const bgOpacity = isSynced ? (settings.bgOpacity ?? 0.35) : (settings.hudBgOpacity ?? 0.35);
+  const bgTheme = settings.bgTheme ?? 'dark';
+
+  const panelBg = settings.locked
+    ? (bgTheme === 'light' ? `rgba(255, 255, 255, ${bgOpacity})` : `rgba(0, 0, 0, ${bgOpacity})`)
+    : (bgTheme === 'light' ? 'rgba(245, 245, 245, 0.9)' : 'rgba(18, 22, 28, 0.9)');
+    
+  const panelBorder = settings.locked
+    ? (bgTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid rgba(255, 255, 255, 0.05)')
+    : (bgTheme === 'light' ? '2px dashed #8b5cf6' : '2px dashed var(--neon-purple)');
+
+  const textColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#1f2937' : '#ffffff';
+  const secondaryTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#4b5563' : 'rgba(255, 255, 255, 0.4)';
+  const mutedTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#6b7280' : 'rgba(255, 255, 255, 0.3)';
   
   const hudWrapperStyle = {
     width: `${baseWidth}px`,
     height: `${baseHeight}px`,
     transform: `scale(${totalScale})`,
     transformOrigin: 'center center',
-    opacity: settings.opacity,
+    opacity: isSynced ? (settings.opacity ?? 0.9) : (settings.hudOpacity ?? 0.9),
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
@@ -245,8 +264,8 @@ export default function Overlay() {
           width: '100%',
           height: '100%',
           borderRadius: '12px',
-          background: settings.locked ? 'rgba(0, 0, 0, 0.35)' : 'rgba(18, 22, 28, 0.85)',
-          border: settings.locked ? '1px solid rgba(255,255,255,0.05)' : '2px dashed var(--neon-purple)',
+          background: panelBg,
+          border: panelBorder,
           padding: '14px',
           paddingTop: !settings.locked ? '45px' : '14px',
           display: 'flex',
@@ -257,11 +276,11 @@ export default function Overlay() {
         }}
       >
         {!wsConnected ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: '500' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '13px', fontWeight: '500' }}>
             ⚠️ Telemetry Server Offline
           </div>
         ) : !telemetry ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '13px', fontWeight: '500' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '13px', fontWeight: '500' }}>
             🏁 Waiting for iRacing...
           </div>
         ) : (
@@ -285,12 +304,12 @@ export default function Overlay() {
                     >
                       {telemetry.delta <= 0 ? '' : '+'}{telemetry.delta.toFixed(2)}s
                     </span>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.5px' }}>
+                    <span style={{ fontSize: '11px', color: secondaryTextColor, letterSpacing: '0.5px' }}>
                       VS REF LAP
                     </span>
                   </div>
                 ) : (
-                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', letterSpacing: '1px' }}>
+                  <span style={{ fontSize: '12px', color: mutedTextColor, letterSpacing: '1px' }}>
                     NO REF LAP LOADED
                   </span>
                 )}
@@ -300,7 +319,7 @@ export default function Overlay() {
                 {/* Speed */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
-                    <span className="num-mono" style={{ fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>
+                    <span className="num-mono" style={{ fontSize: '24px', fontWeight: '800', color: textColor }}>
                       {Math.round(telemetry.speed)}
                     </span>
                     {telemetry.hasReference && (
@@ -308,13 +327,13 @@ export default function Overlay() {
                         /{Math.round(telemetry.refSpeed)}
                       </span>
                     )}
-                    <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginLeft: '4px' }}>KM/H</span>
+                    <span style={{ fontSize: '9px', color: secondaryTextColor, marginLeft: '4px' }}>KM/H</span>
                   </div>
                   {telemetry.hasReference && (
                     <div style={{ fontSize: '12px', fontWeight: '700', marginTop: '2px' }}>
                       {(() => {
                         const speedDelta = Math.round(telemetry.speed - telemetry.refSpeed);
-                        const deltaColor = speedDelta > 0 ? 'var(--neon-green)' : speedDelta < 0 ? 'var(--neon-red)' : 'var(--text-secondary)';
+                        const deltaColor = speedDelta > 0 ? 'var(--neon-green)' : speedDelta < 0 ? 'var(--neon-red)' : secondaryTextColor;
                         return (
                           <span className="num-mono" style={{ color: deltaColor }}>
                             {speedDelta > 0 ? '▲ +' : speedDelta < 0 ? '▼ ' : ''}{speedDelta} km/h
@@ -326,10 +345,10 @@ export default function Overlay() {
                 </div>
                 
                 {/* Gear */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '10px' }}>
-                  <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', marginBottom: '-3px' }}>GEAR</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', borderLeft: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(255,255,255,0.1)', paddingLeft: '10px' }}>
+                  <span style={{ fontSize: '9px', color: secondaryTextColor, marginBottom: '-3px' }}>GEAR</span>
                   <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                    <span className="num-mono" style={{ fontSize: '26px', fontWeight: '800', color: '#ffffff' }}>
+                    <span className="num-mono" style={{ fontSize: '26px', fontWeight: '800', color: textColor }}>
                       {telemetry.gear === 0 ? 'N' : telemetry.gear === -1 ? 'R' : telemetry.gear}
                     </span>
                     {telemetry.hasReference && (
@@ -417,14 +436,14 @@ export default function Overlay() {
                 </div>
               ) : (
                 /* Rolling Telemetry Chart Mode */
-                <div style={{ width: '100%', height: '90px', position: 'relative', background: 'rgba(0,0,0,0.15)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '90px', position: 'relative', background: bgTheme === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(0,0,0,0.15)', borderRadius: '6px', border: bgTheme === 'light' ? '1px solid rgba(0,0,0,0.05)' : '1px solid rgba(255,255,255,0.03)', overflow: 'hidden' }}>
                   <canvas 
                     ref={canvasRef} 
                     width={Math.round(400 * totalScale)} 
                     height={Math.round(90 * totalScale)}
                     style={{ width: '100%', height: '100%', display: 'block' }}
                   />
-                  <div style={{ position: 'absolute', top: '4px', left: '6px', display: 'flex', gap: '8px', fontSize: '9px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.5px' }}>
+                  <div style={{ position: 'absolute', top: '4px', left: '6px', display: 'flex', gap: '8px', fontSize: '9px', color: secondaryTextColor, letterSpacing: '0.5px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: settings.throttleColor }} /> Live T
                     </span>

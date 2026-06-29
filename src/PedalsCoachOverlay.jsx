@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
 const DEFAULT_SETTINGS = {
-  opacity: 0.9,
-  scale: 1.0,
+  pedalsOpacity: 0.9,
+  pedalsScale: 1.0,
+  pedalsBgOpacity: 0.35,
   throttleColor: '#10b981',
   brakeColor: '#ef4444',
-  locked: true
+  locked: true,
+  bgTheme: 'dark'
 };
 
 export default function PedalsCoachOverlay() {
@@ -18,6 +20,7 @@ export default function PedalsCoachOverlay() {
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
+    document.body.style.backgroundColor = 'transparent';
     const handleStorageChange = () => {
       const saved = localStorage.getItem('overlay_settings');
       if (saved) {
@@ -49,7 +52,8 @@ export default function PedalsCoachOverlay() {
   const scaleX = dimensions.width / baseWidth;
   const scaleY = dimensions.height / baseHeight;
   const scaleFactor = Math.min(scaleX, scaleY);
-  const totalScale = scaleFactor * settings.scale;
+  const isSynced = settings.syncSettings !== false;
+  const totalScale = scaleFactor * (isSynced ? (settings.scale ?? 1.0) : (settings.pedalsScale ?? 1.0));
 
   const overlayStyle = {
     width: '100vw',
@@ -62,12 +66,27 @@ export default function PedalsCoachOverlay() {
     background: 'transparent'
   };
 
+  const bgOpacity = isSynced ? (settings.bgOpacity ?? 0.35) : (settings.pedalsBgOpacity ?? 0.35);
+  const bgTheme = settings.bgTheme ?? 'dark';
+
+  const panelBg = settings.locked
+    ? (bgTheme === 'light' ? `rgba(255, 255, 255, ${bgOpacity})` : `rgba(0, 0, 0, ${bgOpacity})`)
+    : (bgTheme === 'light' ? 'rgba(245, 245, 245, 0.9)' : 'rgba(18, 22, 28, 0.9)');
+    
+  const panelBorder = settings.locked
+    ? (bgTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid rgba(255, 255, 255, 0.05)')
+    : (bgTheme === 'light' ? '2px dashed #8b5cf6' : '2px dashed var(--neon-purple)');
+
+  const textColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#1f2937' : '#ffffff';
+  const secondaryTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#4b5563' : 'rgba(255, 255, 255, 0.4)';
+  const mutedTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#6b7280' : 'rgba(255, 255, 255, 0.2)';
+
   const hudWrapperStyle = {
     width: `${baseWidth}px`,
     height: `${baseHeight}px`,
     transform: `scale(${totalScale})`,
     transformOrigin: 'center center',
-    opacity: settings.opacity,
+    opacity: isSynced ? (settings.opacity ?? 0.9) : (settings.pedalsOpacity ?? 0.9),
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
@@ -131,7 +150,6 @@ export default function PedalsCoachOverlay() {
       shiftPct = (distToShift / 50.0) * 100;
     }
   }
-
   const containerClass = `overlay-container ${!settings.locked ? 'unlocked-active' : ''}`;
 
   return (
@@ -161,7 +179,7 @@ export default function PedalsCoachOverlay() {
               zIndex: 100
             }}
           >
-            ↕ DRAG PEDALS COACH
+            ↕ DRAG PEDALS REFERENCE
           </div>
         )}
 
@@ -171,8 +189,8 @@ export default function PedalsCoachOverlay() {
             width: '100%',
             height: '100%',
             borderRadius: '12px',
-            background: settings.locked ? 'rgba(0, 0, 0, 0.35)' : 'rgba(18, 22, 28, 0.85)',
-            border: settings.locked ? '1px solid rgba(255,255,255,0.05)' : '2px dashed var(--neon-purple)',
+            background: panelBg,
+            border: panelBorder,
             padding: '14px',
             paddingTop: !settings.locked ? '45px' : '14px',
             display: 'flex',
@@ -184,23 +202,23 @@ export default function PedalsCoachOverlay() {
           }}
         >
           {!wsConnected ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '500', textAlign: 'center' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '11px', fontWeight: '500', textAlign: 'center' }}>
               ⚠️ Server Offline
             </div>
           ) : !telemetry ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '500', textAlign: 'center' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '11px', fontWeight: '500', textAlign: 'center' }}>
               🏁 Waiting for iRacing...
             </div>
           ) : !hasRef ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '11px', fontWeight: '500', textAlign: 'center', letterSpacing: '0.5px' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: mutedTextColor, fontSize: '11px', fontWeight: '500', textAlign: 'center', letterSpacing: '0.5px' }}>
               NO REF LAP LOADED
             </div>
           ) : (
             <div style={{ display: 'flex', width: '100%', height: '100%', gap: '10px' }}>
               {/* Brake Coach Bar */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                  BRAKE COACH
+                <span style={{ fontSize: '9px', color: secondaryTextColor, fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                  BRAKE REFERENCE
                 </span>
                 
                 <div style={{ flex: 1, width: '100%', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -234,13 +252,13 @@ export default function PedalsCoachOverlay() {
                       </span>
                     ) : showBrake ? (
                       <>
-                        <span className="num-mono" style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', textShadow: '1px 1px 3px black' }}>
+                        <span className="num-mono" style={{ fontSize: '20px', fontWeight: '800', color: textColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 3px black' }}>
                           {Math.round(distToBrake)}
                         </span>
-                        <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.6)', textShadow: '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
+                        <span style={{ fontSize: '8px', color: secondaryTextColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
                       </>
                     ) : (
-                      <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>---</span>
+                      <span style={{ fontSize: '16px', color: mutedTextColor, fontWeight: '700' }}>---</span>
                     )}
                   </div>
                 </div>
@@ -248,8 +266,8 @@ export default function PedalsCoachOverlay() {
 
               {/* Throttle Coach Bar */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                  GAS COACH
+                <span style={{ fontSize: '9px', color: secondaryTextColor, fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                  GAS REFERENCE
                 </span>
                 
                 <div style={{ flex: 1, width: '100%', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -283,13 +301,13 @@ export default function PedalsCoachOverlay() {
                       </span>
                     ) : showThrottle ? (
                       <>
-                        <span className="num-mono" style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', textShadow: '1px 1px 3px black' }}>
+                        <span className="num-mono" style={{ fontSize: '20px', fontWeight: '800', color: textColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 3px black' }}>
                           {Math.round(distToThrottle)}
                         </span>
-                        <span style={{ fontSize: '8px', color: 'rgba(255,255,255,0.6)', textShadow: '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
+                        <span style={{ fontSize: '8px', color: secondaryTextColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
                       </>
                     ) : (
-                      <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>---</span>
+                      <span style={{ fontSize: '16px', color: mutedTextColor, fontWeight: '700' }}>---</span>
                     )}
                   </div>
                 </div>
@@ -297,8 +315,8 @@ export default function PedalsCoachOverlay() {
 
               {/* Gear Coach Bar */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                  GEAR COACH
+                <span style={{ fontSize: '9px', color: secondaryTextColor, fontWeight: '700', textAlign: 'center', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                  GEAR REFERENCE
                 </span>
                 
                 <div style={{ flex: 1, width: '100%', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: '6px', overflow: 'hidden', position: 'relative', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -333,14 +351,14 @@ export default function PedalsCoachOverlay() {
                         </span>
                       ) : (
                         <>
-                          <span className="num-mono" style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', textShadow: '1px 1px 3px black' }}>
+                          <span className="num-mono" style={{ fontSize: '18px', fontWeight: '800', color: textColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 3px black' }}>
                             {shiftType === 'up' ? '▲' : '▼'} {Math.round(distToShift)}
                           </span>
-                          <span style={{ fontSize: '7px', color: 'rgba(255,255,255,0.6)', textShadow: '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
+                          <span style={{ fontSize: '7px', color: secondaryTextColor, textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '1px 1px 2px black', marginTop: '-2px' }}>METERS</span>
                         </>
                       )
                     ) : (
-                      <span style={{ fontSize: '16px', color: 'rgba(255,255,255,0.2)', fontWeight: '700' }}>---</span>
+                      <span style={{ fontSize: '16px', color: mutedTextColor, fontWeight: '700' }}>---</span>
                     )}
                   </div>
                 </div>

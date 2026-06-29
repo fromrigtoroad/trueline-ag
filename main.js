@@ -9,6 +9,31 @@ let pedalsCoachWindow = null;
 let lineCoachWindow = null;
 let pythonProcess = null;
 
+const stateFilePath = path.join(app.getPath('userData'), 'window-state.json');
+
+function loadWindowState() {
+  try {
+    if (fs.existsSync(stateFilePath)) {
+      return JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to load window state', e);
+  }
+  return {};
+}
+
+function saveWindowState(windowKey, win) {
+  try {
+    const state = loadWindowState();
+    if (win && !win.isDestroyed()) {
+      state[windowKey] = win.getBounds();
+      fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Failed to save window state', e);
+  }
+}
+
 // Determine if we are in development mode
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -95,10 +120,10 @@ function startPythonBridge() {
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 650,
-    minWidth: 600,
-    minHeight: 500,
+    width: 1024,
+    height: 720,
+    minWidth: 800,
+    minHeight: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -132,9 +157,14 @@ function createMainWindow() {
 }
 
 function createOverlayWindow() {
+  const windowState = loadWindowState();
+  const savedBounds = windowState['overlay'] || {};
+
   overlayWindow = new BrowserWindow({
-    width: 450,
-    height: 250,
+    x: savedBounds.x,
+    y: savedBounds.y,
+    width: savedBounds.width || 450,
+    height: savedBounds.height || 250,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -150,6 +180,10 @@ function createOverlayWindow() {
 
   // Lock aspect ratio to match base layout aspect ratio
   overlayWindow.setAspectRatio(450 / 250);
+
+  const saveState = () => saveWindowState('overlay', overlayWindow);
+  overlayWindow.on('move', saveState);
+  overlayWindow.on('resize', saveState);
 
   const overlayUrl = isDev 
     ? 'http://localhost:5173/#overlay' 
@@ -170,9 +204,14 @@ function createOverlayWindow() {
 }
 
 function createPedalsCoachWindow() {
+  const windowState = loadWindowState();
+  const savedBounds = windowState['pedals'] || {};
+
   pedalsCoachWindow = new BrowserWindow({
-    width: 220,
-    height: 220,
+    x: savedBounds.x,
+    y: savedBounds.y,
+    width: savedBounds.width || 220,
+    height: savedBounds.height || 220,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -187,6 +226,10 @@ function createPedalsCoachWindow() {
   });
 
   pedalsCoachWindow.setAspectRatio(1.0);
+
+  const saveState = () => saveWindowState('pedals', pedalsCoachWindow);
+  pedalsCoachWindow.on('move', saveState);
+  pedalsCoachWindow.on('resize', saveState);
 
   const url = isDev 
     ? 'http://localhost:5173/#pedals-coach' 
@@ -205,9 +248,14 @@ function createPedalsCoachWindow() {
 }
 
 function createLineCoachWindow() {
+  const windowState = loadWindowState();
+  const savedBounds = windowState['line'] || {};
+
   lineCoachWindow = new BrowserWindow({
-    width: 300,
-    height: 90,
+    x: savedBounds.x,
+    y: savedBounds.y,
+    width: savedBounds.width || 400,
+    height: savedBounds.height || 90,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -221,7 +269,11 @@ function createLineCoachWindow() {
     show: false
   });
 
-  lineCoachWindow.setAspectRatio(300 / 90);
+  lineCoachWindow.setAspectRatio(400 / 90);
+
+  const saveState = () => saveWindowState('line', lineCoachWindow);
+  lineCoachWindow.on('move', saveState);
+  lineCoachWindow.on('resize', saveState);
 
   const url = isDev 
     ? 'http://localhost:5173/#line-coach' 

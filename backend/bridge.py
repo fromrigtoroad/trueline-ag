@@ -134,7 +134,13 @@ class TelemetryBridge:
         try:
             val = self.ir[key]
             return val if val is not None else default
-        except Exception:
+        except Exception as e:
+            if not hasattr(self, "_safe_val_errors"):
+                self._safe_val_errors = {}
+            tick = getattr(self, "tick_counter", 0)
+            if key not in self._safe_val_errors or tick % 300 == 0:
+                logging.error(f"Error reading telemetry key '{key}': {e}")
+                self._safe_val_errors[key] = True
             return default
 
     def init_irsdk(self):
@@ -153,7 +159,7 @@ class TelemetryBridge:
             if self.ir.startup():
                 self.ir_connected = True
                 try:
-                    var_names = [var.name for var in self.ir.telemetry_vars]
+                    var_names = self.ir.var_headers_names
                     logging.info(f"Available telemetry variables ({len(var_names)}): " + ", ".join(var_names))
                 except Exception as log_err:
                     logging.error(f"Failed to log telemetry variables: {log_err}")
@@ -258,43 +264,61 @@ class TelemetryBridge:
             user_lon = self.get_safe_val("Lon", 0.0)
             user_alt = self.get_safe_val("Alt", 0.0)
 
-        # Extract live metric coordinates (CarIdxPosX / CarIdxPosZ)
+        # Extract live coordinates
         user_x = 0.0
         user_z = 0.0
         player_idx = int(self.get_safe_val("PlayerCarIdx", 0))
         
+        def get_coords_from_gps(lat_val, lon_val):
+            if not self.reference_lap:
+                return 0.0, 0.0
+            R_earth = 6371000.0
+            first_valid = next((s for s in self.reference_lap if s.get("lat") is not None and s.get("lon") is not None), None)
+            if first_valid:
+                lat_origin_rad = first_valid["lat"] * math.pi / 180.0
+                lon_origin_rad = first_valid["lon"] * math.pi / 180.0
+                cos_lat = math.cos(lat_origin_rad)
+                
+                user_lat_rad = lat_val * math.pi / 180.0
+                user_lon_rad = lon_val * math.pi / 180.0
+                u_x = (user_lon_rad - lon_origin_rad) * R_earth * cos_lat
+                u_z = (user_lat_rad - lat_origin_rad) * R_earth
+                return u_x, u_z
+            return 0.0, 0.0
+
         if self.use_mock:
-            if self.reference_lap:
-                R_earth = 6371000.0
-                first_valid = next((s for s in self.reference_lap if s.get("lat") is not None and s.get("lon") is not None), None)
-                if first_valid:
-                    lat_origin_rad = first_valid["lat"] * math.pi / 180.0
-                    lon_origin_rad = first_valid["lon"] * math.pi / 180.0
-                    cos_lat = math.cos(lat_origin_rad)
-                    
-                    user_lat_rad = user_lat * math.pi / 180.0
-                    user_lon_rad = user_lon * math.pi / 180.0
-                    user_x = (user_lon_rad - lon_origin_rad) * R_earth * cos_lat
-                    user_z = (user_lat_rad - lat_origin_rad) * R_earth
-                    
-                    # For mock, alignment is 1:1 Identity
-                    self.align_theta = 0.0
-                    self.align_dx = 0.0
-                    self.align_dz = 0.0
-                    self.aligned = True
+            user_x, user_z = get_coords_from_gps(user_lat, user_lon)
+            # For mock, alignment is 1:1 Identity
+            self.align_theta = 0.0
+            self.align_dx = 0.0
+            self.align_dz = 0.0
+            self.aligned = True
         else:
+            # 1. Try absolute world coordinate arrays (live telemetry)
+            has_world_coords = False
             try:
                 pos_x_arr = self.ir["CarIdxPosX"]
                 pos_z_arr = self.ir["CarIdxPosZ"]
-                if pos_x_arr and len(pos_x_arr) > player_idx:
+                if pos_x_arr and len(pos_x_arr) > player_idx and pos_x_arr[player_idx] is not None:
                     user_x = pos_x_arr[player_idx]
-                if pos_z_arr and len(pos_z_arr) > player_idx:
+                    has_world_coords = True
+                if pos_z_arr and len(pos_z_arr) > player_idx and pos_z_arr[player_idx] is not None:
                     user_z = pos_z_arr[player_idx]
+                    has_world_coords = True
             except Exception as e:
                 # Log coordinate extraction errors
                 if not hasattr(self, "_last_coord_err_log") or self.tick_counter % 300 == 0:
                     logging.error(f"Error reading CarIdxPosX/PosZ: {e}")
                     self._last_coord_err_log = True
+
+            # 2. Fall back to GPS coordinates (e.g. in Replay files playback)
+            if not has_world_coords and user_lat != 0.0 and user_lon != 0.0:
+                user_x, user_z = get_coords_from_gps(user_lat, user_lon)
+                # GPS coords converted relative to ref lap origin require no translation alignment
+                self.align_theta = 0.0
+                self.align_dx = 0.0
+                self.align_dz = 0.0
+                self.aligned = True
 
         # Debug logging loop diagnostics
         if not hasattr(self, "tick_counter"):

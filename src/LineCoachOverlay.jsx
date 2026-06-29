@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
 const DEFAULT_SETTINGS = {
-  opacity: 0.9,
-  scale: 1.0,
-  locked: true
+  lineOpacity: 0.9,
+  lineScale: 1.0,
+  lineBgOpacity: 0.35,
+  locked: true,
+  bgTheme: 'dark'
 };
 
 export default function LineCoachOverlay() {
@@ -16,6 +18,7 @@ export default function LineCoachOverlay() {
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
+    document.body.style.backgroundColor = 'transparent';
     const handleStorageChange = () => {
       const saved = localStorage.getItem('overlay_settings');
       if (saved) {
@@ -42,12 +45,40 @@ export default function LineCoachOverlay() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const baseWidth = 300;
+  const baseWidth = 400;
   const baseHeight = 90;
   const scaleX = dimensions.width / baseWidth;
   const scaleY = dimensions.height / baseHeight;
   const scaleFactor = Math.min(scaleX, scaleY);
-  const totalScale = scaleFactor * settings.scale;
+  const isSynced = settings.syncSettings !== false;
+  const totalScale = scaleFactor * (isSynced ? (settings.scale ?? 1.0) : (settings.lineScale ?? 1.0));
+
+  const bgOpacity = isSynced ? (settings.bgOpacity ?? 0.35) : (settings.lineBgOpacity ?? 0.35);
+  const bgTheme = settings.bgTheme ?? 'dark';
+
+  const panelBg = settings.locked
+    ? (bgTheme === 'light' ? `rgba(255, 255, 255, ${bgOpacity})` : `rgba(0, 0, 0, ${bgOpacity})`)
+    : (bgTheme === 'light' ? 'rgba(245, 245, 245, 0.9)' : 'rgba(18, 22, 28, 0.9)');
+    
+  const panelBorder = settings.locked
+    ? (bgTheme === 'light' ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid rgba(255, 255, 255, 0.05)')
+    : (bgTheme === 'light' ? '2px dashed #8b5cf6' : '2px dashed var(--neon-purple)');
+
+  const textColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#1f2937' : '#ffffff';
+  const secondaryTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#4b5563' : 'rgba(255, 255, 255, 0.4)';
+  const mutedTextColor = (bgTheme === 'light' && bgOpacity > 0.6 && settings.locked) ? '#6b7280' : 'rgba(255, 255, 255, 0.3)';
+
+  const hudWrapperStyle = {
+    width: `${baseWidth}px`,
+    height: `${baseHeight}px`,
+    transform: `scale(${totalScale})`,
+    transformOrigin: 'center center',
+    opacity: isSynced ? (settings.opacity ?? 0.9) : (settings.lineOpacity ?? 0.9),
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box'
+  };
 
   const overlayStyle = {
     width: '100vw',
@@ -58,18 +89,6 @@ export default function LineCoachOverlay() {
     overflow: 'hidden',
     boxSizing: 'border-box',
     background: 'transparent'
-  };
-
-  const hudWrapperStyle = {
-    width: `${baseWidth}px`,
-    height: `${baseHeight}px`,
-    transform: `scale(${totalScale})`,
-    transformOrigin: 'center center',
-    opacity: settings.opacity,
-    position: 'relative',
-    display: 'flex',
-    flexDirection: 'column',
-    boxSizing: 'border-box'
   };
 
   useEffect(() => {
@@ -153,7 +172,7 @@ export default function LineCoachOverlay() {
               zIndex: 100
             }}
           >
-            ↕ DRAG RACING LINE COACH
+            ↕ DRAG RACING LINE REFERENCE
           </div>
         )}
 
@@ -163,8 +182,8 @@ export default function LineCoachOverlay() {
             width: '100%',
             height: '100%',
             borderRadius: '12px',
-            background: settings.locked ? 'rgba(0, 0, 0, 0.35)' : 'rgba(18, 22, 28, 0.85)',
-            border: settings.locked ? '1px solid rgba(255,255,255,0.05)' : '2px dashed var(--neon-purple)',
+            background: panelBg,
+            border: panelBorder,
             padding: '10px 14px',
             paddingTop: !settings.locked ? '38px' : '10px',
             display: 'flex',
@@ -176,15 +195,15 @@ export default function LineCoachOverlay() {
           }}
         >
           {!wsConnected ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '500', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '11px', fontWeight: '500', height: '100%' }}>
               ⚠️ Server Offline
             </div>
           ) : !telemetry ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '500', height: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: secondaryTextColor, fontSize: '11px', fontWeight: '500', height: '100%' }}>
               🏁 Waiting for iRacing...
             </div>
           ) : !hasRef ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '11px', fontWeight: '500', height: '100%', letterSpacing: '0.5px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: mutedTextColor, fontSize: '11px', fontWeight: '500', height: '100%', letterSpacing: '0.5px' }}>
               NO REF LAP LOADED
             </div>
           ) : (
@@ -195,9 +214,9 @@ export default function LineCoachOverlay() {
                 style={{ 
                   fontSize: '11px', 
                   fontWeight: '800', 
-                  color: '#ffffff', 
+                  color: textColor, 
                   textAlign: 'center',
-                  textShadow: '0 0 6px rgba(0, 210, 255, 0.3)',
+                  textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '0 0 6px rgba(0, 210, 255, 0.3)',
                   letterSpacing: '0.5px'
                 }}
               >
@@ -246,7 +265,7 @@ export default function LineCoachOverlay() {
               </div>
 
               {/* Scale Labels */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'rgba(255,255,255,0.3)', fontWeight: '600', marginTop: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: secondaryTextColor, fontWeight: '600', marginTop: '2px' }}>
                 <span>3m L</span>
                 <span>CENTER</span>
                 <span>3m R</span>
