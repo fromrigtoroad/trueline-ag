@@ -241,6 +241,13 @@ class TelemetryBridge:
         lap_dist_pct = raw_data["lapDistPct"]
         session_time = raw_data["sessionTime"]
 
+        # Compute actual simulation time delta using SessionTime
+        last_t = getattr(self, "last_session_time", session_time)
+        dt = session_time - last_t
+        self.last_session_time = session_time
+        if dt < 0.0 or dt > 0.5:
+            dt = 0.0
+
         # 1. Handle lap transitions and timing
         if lap != self.last_lap:
             self.lap_start_time = session_time
@@ -513,9 +520,6 @@ class TelemetryBridge:
                 
                 # Fetch live speed in m/s directly from SDK
                 live_speed = self.get_safe_val("Speed", 0.0)
-                
-                # iRacing telemetry updates at 60Hz
-                dt = 1.0 / 60.0
                 
                 # Update dead reckoned lateral deviation
                 # If we steer left (live_yaw > ref_yaw), heading_error > 0, we drift to the left.

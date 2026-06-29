@@ -279,6 +279,9 @@ def interpolate_lap_data(samples, num_points=2000):
         alt_arr = alt_arr[clean_indices]
         yaw_arr = yaw_arr[clean_indices]
 
+    yaw_x = np.cos(yaw_arr)
+    yaw_y = np.sin(yaw_arr)
+
     # Create target grid (0.0 to 1.0)
     target_grid = np.linspace(0.0, 1.0, num_points)
     
@@ -291,7 +294,10 @@ def interpolate_lap_data(samples, num_points=2000):
     interp_lat = np.interp(target_grid, dist_pct, lat_arr)
     interp_lon = np.interp(target_grid, dist_pct, lon_arr)
     interp_alt = np.interp(target_grid, dist_pct, alt_arr)
-    interp_yaw = np.interp(target_grid, dist_pct, yaw_arr)
+    
+    interp_yaw_x = np.interp(target_grid, dist_pct, yaw_x)
+    interp_yaw_y = np.interp(target_grid, dist_pct, yaw_y)
+    interp_yaw = np.arctan2(interp_yaw_y, interp_yaw_x)
     
     # Construct list of interpolated points
     interpolated_points = []
