@@ -162,6 +162,7 @@ def parse_ibt_file(file_path):
         lat = float(extract_val(record_bytes, vars_dict['Lat'])) if 'Lat' in vars_dict else 0.0
         lon = float(extract_val(record_bytes, vars_dict['Lon'])) if 'Lon' in vars_dict else 0.0
         alt = float(extract_val(record_bytes, vars_dict['Alt'])) if 'Alt' in vars_dict else 0.0
+        yaw = float(extract_val(record_bytes, vars_dict['Yaw'])) if 'Yaw' in vars_dict else 0.0
 
         if lap not in laps_raw:
             laps_raw[lap] = []
@@ -175,7 +176,8 @@ def parse_ibt_file(file_path):
             'gear': gear,
             'lat': lat,
             'lon': lon,
-            'alt': alt
+            'alt': alt,
+            'yaw': yaw
         })
 
     # 5. Process laps to find completed, valid ones
@@ -252,6 +254,7 @@ def interpolate_lap_data(samples, num_points=2000):
     lat_arr = np.array([s.get('lat', 0.0) for s in samples])
     lon_arr = np.array([s.get('lon', 0.0) for s in samples])
     alt_arr = np.array([s.get('alt', 0.0) for s in samples])
+    yaw_arr = np.array([s.get('yaw', 0.0) for s in samples])
     
     # Normalize time so the lap starts at t=0
     time_arr = time_arr - time_arr[0]
@@ -274,6 +277,7 @@ def interpolate_lap_data(samples, num_points=2000):
         lat_arr = lat_arr[clean_indices]
         lon_arr = lon_arr[clean_indices]
         alt_arr = alt_arr[clean_indices]
+        yaw_arr = yaw_arr[clean_indices]
 
     # Create target grid (0.0 to 1.0)
     target_grid = np.linspace(0.0, 1.0, num_points)
@@ -287,6 +291,7 @@ def interpolate_lap_data(samples, num_points=2000):
     interp_lat = np.interp(target_grid, dist_pct, lat_arr)
     interp_lon = np.interp(target_grid, dist_pct, lon_arr)
     interp_alt = np.interp(target_grid, dist_pct, alt_arr)
+    interp_yaw = np.interp(target_grid, dist_pct, yaw_arr)
     
     # Construct list of interpolated points
     interpolated_points = []
@@ -300,7 +305,8 @@ def interpolate_lap_data(samples, num_points=2000):
             'gear': int(round(float(interp_gear[i]))),
             'lat': float(interp_lat[i]),
             'lon': float(interp_lon[i]),
-            'alt': float(interp_alt[i])
+            'alt': float(interp_alt[i]),
+            'yaw': float(interp_yaw[i])
         })
         
     return interpolated_points

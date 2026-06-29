@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS = {
   brakeColor: '#ef4444'
 };
 
-const CURRENT_VERSION = '1.2.3';
+const CURRENT_VERSION = '1.2.4';
 
 export default function App() {
   const [wsConnected, setWsConnected] = useState(false);

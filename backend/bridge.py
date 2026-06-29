@@ -61,6 +61,7 @@ class TelemetryBridge:
         self.align_dx = 0.0
         self.align_dz = 0.0
         self.aligned = False
+        self.dead_reckoned_dev = 0.0
         
         # Timing state
         self.last_lap = -1
@@ -76,6 +77,7 @@ class TelemetryBridge:
         self.braking_points = []
         self.throttle_points = []
         self.shift_points = []
+        self.dead_reckoned_dev = 0.0
         
         # Reset alignment state
         self.align_live_pts = []
@@ -243,6 +245,7 @@ class TelemetryBridge:
         if lap != self.last_lap:
             self.lap_start_time = session_time
             self.last_lap = lap
+            self.dead_reckoned_dev = 0.0
             # If recording, check if we need to process the lap we just completed
             if self.is_recording and len(self.recorded_ticks) > 500:
                 # To prevent storing partial data, we could save the finished lap
@@ -424,7 +427,7 @@ class TelemetryBridge:
             
             is_driving = raw_data.get("speed", 0.0) > 10.0
             
-            if is_driving and user_x != 0.0 and user_z != 0.0:
+            if getattr(self, "coords_available", False) and is_driving and user_x != 0.0 and user_z != 0.0:
                 self.align_live_pts.append((user_x, user_z))
                 self.align_ref_pts.append((ref_x_metric, ref_z_metric))
                 
@@ -461,45 +464,75 @@ class TelemetryBridge:
                     self.align_dz = mean_z_live - (mean_x_ref * math.sin(self.align_theta) + mean_z_ref * math.cos(self.align_theta))
                     self.aligned = True
 
-            if self.aligned and user_x != 0.0 and user_z != 0.0:
-                cos_t = math.cos(self.align_theta)
-                sin_t = math.sin(self.align_theta)
-                
-                # Project current reference point
-                ref_x_proj = ref_x_metric * cos_t - ref_z_metric * sin_t + self.align_dx
-                ref_z_proj = ref_x_metric * sin_t + ref_z_metric * cos_t + self.align_dz
-                
-                # Project adjacent reference points to compute heading vector
-                prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
-                next_ref = self.reference_lap[(ref_idx + 1) % num_points]
-                
-                prev_x_metric = prev_ref.get("x_metric", ref_x_metric)
-                prev_z_metric = prev_ref.get("z_metric", ref_z_metric)
-                next_x_metric = next_ref.get("x_metric", ref_x_metric)
-                next_z_metric = next_ref.get("z_metric", ref_z_metric)
-                
-                prev_x_proj = prev_x_metric * cos_t - prev_z_metric * sin_t + self.align_dx
-                prev_z_proj = prev_x_metric * sin_t + prev_z_metric * cos_t + self.align_dz
-                next_x_proj = next_x_metric * cos_t - next_z_metric * sin_t + self.align_dx
-                next_z_proj = next_x_metric * sin_t + next_z_metric * cos_t + self.align_dz
-                
-                heading_x = next_x_proj - prev_x_proj
-                heading_z = next_z_proj - prev_z_proj
-                length = (heading_x**2 + heading_z**2)**0.5
-                
-                if length > 0.001:
-                    heading_x /= length
-                    heading_z /= length
+                if self.aligned:
+                    cos_t = math.cos(self.align_theta)
+                    sin_t = math.sin(self.align_theta)
                     
-                    # Right perpendicular vector: (hz, -hx)
-                    right_x = heading_z
-                    right_z = -heading_x
+                    # Project current reference point
+                    ref_x_proj = ref_x_metric * cos_t - ref_z_metric * sin_t + self.align_dx
+                    ref_z_proj = ref_x_metric * sin_t + ref_z_metric * cos_t + self.align_dz
                     
-                    diff_x = ref_x_proj - user_x
-                    diff_z = ref_z_proj - user_z
+                    # Project adjacent reference points to compute heading vector
+                    prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
+                    next_ref = self.reference_lap[(ref_idx + 1) % num_points]
                     
-                    # Positive if reference is to the right of user, negative if left
-                    lateral_deviation = diff_x * right_x + diff_z * right_z
+                    prev_x_metric = prev_ref.get("x_metric", ref_x_metric)
+                    prev_z_metric = prev_ref.get("z_metric", ref_z_metric)
+                    next_x_metric = next_ref.get("x_metric", ref_x_metric)
+                    next_z_metric = next_ref.get("z_metric", ref_z_metric)
+                    
+                    prev_x_proj = prev_x_metric * cos_t - prev_z_metric * sin_t + self.align_dx
+                    prev_z_proj = prev_x_metric * sin_t + prev_z_metric * cos_t + self.align_dz
+                    next_x_proj = next_x_metric * cos_t - next_z_metric * sin_t + self.align_dx
+                    next_z_proj = next_x_metric * sin_t + next_z_metric * cos_t + self.align_dz
+                    
+                    heading_x = next_x_proj - prev_x_proj
+                    heading_z = next_z_proj - prev_z_proj
+                    length = (heading_x**2 + heading_z**2)**0.5
+                    
+                    if length > 0.001:
+                        heading_x /= length
+                        heading_z /= length
+                        
+                        # Right perpendicular vector: (hz, -hx)
+                        right_x = heading_z
+                        right_z = -heading_x
+                        
+                        diff_x = ref_x_proj - user_x
+                        diff_z = ref_z_proj - user_z
+                        
+                        # Positive if reference is to the right of user, negative if left
+                        lateral_deviation = diff_x * right_x + diff_z * right_z
+            else:
+                # 2. Dead reckoning integration when live coordinates are restricted
+                live_yaw = self.get_safe_val("Yaw", 0.0)
+                ref_yaw = ref_point.get("yaw", 0.0)
+                
+                # Normalize angle delta between -pi and +pi
+                heading_error = math.atan2(math.sin(live_yaw - ref_yaw), math.cos(live_yaw - ref_yaw))
+                
+                # Fetch live speed in m/s directly from SDK
+                live_speed = self.get_safe_val("Speed", 0.0)
+                
+                # iRacing telemetry updates at 60Hz
+                dt = 1.0 / 60.0
+                
+                # Update dead reckoned lateral deviation
+                # If we steer left (live_yaw > ref_yaw), heading_error > 0, we drift to the left.
+                # Since LineCoachOverlay.jsx expects positive values for left of line, we add it directly!
+                lateral_velocity_error = live_speed * math.sin(heading_error)
+                self.dead_reckoned_dev += lateral_velocity_error * dt
+                
+                # Cap the dead reckoned deviation at 3.0 meters (same as maxDev in UI)
+                self.dead_reckoned_dev = max(-3.0, min(3.0, self.dead_reckoned_dev))
+                
+                # Snap to 0 if car is stationary or resetting
+                is_on_track = bool(self.get_safe_val("IsOnTrack", False))
+                on_pit_road = bool(self.get_safe_val("OnPitRoad", False))
+                if live_speed < 1.0 or not is_on_track or on_pit_road:
+                    self.dead_reckoned_dev = 0.0
+                    
+                lateral_deviation = self.dead_reckoned_dev
             
             # Compute distance to next gear shift
             dist_to_shift = 9999.0
@@ -548,7 +581,8 @@ class TelemetryBridge:
                 "gear": raw_data["gear"],
                 "sessionTime": session_time,
                 "userLapTime": user_lap_time,
-                "coordsAvailable": getattr(self, "coords_available", False),
+                "coordsAvailable": self.reference_lap is not None,
+                "isDeadReckoned": self.reference_lap is not None and not getattr(self, "coords_available", False) and not getattr(self, "use_mock", False),
                 **comparison
             }
         }
