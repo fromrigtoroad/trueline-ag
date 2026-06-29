@@ -6,7 +6,6 @@ const fs = require('fs');
 let mainWindow = null;
 let overlayWindow = null;
 let pedalsCoachWindow = null;
-let lineCoachWindow = null;
 let pythonProcess = null;
 
 const stateFilePath = path.join(app.getPath('userData'), 'window-state.json');
@@ -152,7 +151,6 @@ function createMainWindow() {
     mainWindow = null;
     if (overlayWindow) overlayWindow.close();
     if (pedalsCoachWindow) pedalsCoachWindow.close();
-    if (lineCoachWindow) lineCoachWindow.close();
   });
 }
 
@@ -247,50 +245,6 @@ function createPedalsCoachWindow() {
   });
 }
 
-function createLineCoachWindow() {
-  const windowState = loadWindowState();
-  const savedBounds = windowState['line'] || {};
-
-  lineCoachWindow = new BrowserWindow({
-    x: savedBounds.x,
-    y: savedBounds.y,
-    width: savedBounds.width || 400,
-    height: savedBounds.height || 90,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    },
-    show: false
-  });
-
-  lineCoachWindow.setAspectRatio(400 / 90);
-
-  const saveState = () => saveWindowState('line', lineCoachWindow);
-  lineCoachWindow.on('move', saveState);
-  lineCoachWindow.on('resize', saveState);
-
-  const url = isDev 
-    ? 'http://localhost:5173/#line-coach' 
-    : `file://${path.join(__dirname, 'dist', 'index.html')}#line-coach`;
-
-  lineCoachWindow.loadURL(url);
-  lineCoachWindow.webContents.on('console-message', (event, level, message) => {
-    console.log(`[Line Console]: ${message}`);
-  });
-
-  lineCoachWindow.setIgnoreMouseEvents(true, { forward: true });
-
-  lineCoachWindow.on('closed', () => {
-    lineCoachWindow = null;
-  });
-}
-
 // IPC Handlers
 ipcMain.handle('toggle-overlay', (event, show) => {
   if (show) {
@@ -318,21 +272,8 @@ ipcMain.handle('toggle-pedals-coach', (event, show) => {
   }
 });
 
-ipcMain.handle('toggle-line-coach', (event, show) => {
-  if (show) {
-    if (!lineCoachWindow) {
-      createLineCoachWindow();
-    }
-    lineCoachWindow.showInactive();
-  } else {
-    if (lineCoachWindow) {
-      lineCoachWindow.hide();
-    }
-  }
-});
-
 ipcMain.handle('set-overlay-lock', (event, lock) => {
-  [overlayWindow, pedalsCoachWindow, lineCoachWindow].forEach(win => {
+  [overlayWindow, pedalsCoachWindow].forEach(win => {
     if (win) {
       if (lock) {
         win.setIgnoreMouseEvents(true, { forward: true });

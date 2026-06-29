@@ -21,18 +21,14 @@ const DEFAULT_SETTINGS = {
   pedalsBgOpacity: 0.35,
   pedalsScale: 1.0,
   
-  // Racing Line
-  lineVisible: false,
-  lineOpacity: 0.9,
-  lineBgOpacity: 0.35,
-  lineScale: 1.0,
+
   
   // Colors
   throttleColor: '#10b981',
   brakeColor: '#ef4444'
 };
 
-const CURRENT_VERSION = '1.2.7';
+const CURRENT_VERSION = '1.3.0';
 
 export default function App() {
   const [wsConnected, setWsConnected] = useState(false);
@@ -54,7 +50,7 @@ export default function App() {
     return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
   });
 
-  const [selectedOverlayTab, setSelectedOverlayTab] = useState('hud'); // 'hud' | 'pedals' | 'line'
+  const [selectedOverlayTab, setSelectedOverlayTab] = useState('hud'); // 'hud' | 'pedals'
   const [updateAvailable, setUpdateAvailable] = useState(null); // { version, url }
 
   // Sync background theme with body class for Light/Dark mode
@@ -194,11 +190,7 @@ export default function App() {
     }
   }, [settings.pedalsVisible]);
 
-  useEffect(() => {
-    if (window.api) {
-      window.api.toggleLineCoach(settings.lineVisible);
-    }
-  }, [settings.lineVisible]);
+
 
   // Sync Overlay Lock setting with Electron
   useEffect(() => {
@@ -355,6 +347,7 @@ export default function App() {
             </span>
           </div>
 
+
           {/* Pedals Reference */}
           <div 
             onClick={() => setSelectedOverlayTab('pedals')}
@@ -391,57 +384,20 @@ export default function App() {
               ➔
             </span>
           </div>
-
-          {/* Racing Line Reference */}
-          <div 
-            onClick={() => setSelectedOverlayTab('line')}
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              padding: '10px 14px', 
-              borderRadius: '8px', 
-              cursor: 'pointer',
-              background: selectedOverlayTab === 'line' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-              border: selectedOverlayTab === 'line' ? '1px solid var(--neon-blue)' : '1px solid transparent',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <input 
-              type="checkbox" 
-              checked={settings.lineVisible} 
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => updateSettings({ lineVisible: e.target.checked })}
-              style={{ cursor: 'pointer', accentColor: 'var(--neon-blue)', width: '15px', height: '15px' }}
-            />
-            <span style={{ fontSize: '13px', fontWeight: '600', color: selectedOverlayTab === 'line' ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-              🛣️ Racing Line Reference
-            </span>
-            <span style={{ 
-              marginLeft: 'auto', 
-              color: selectedOverlayTab === 'line' ? 'var(--neon-blue)' : 'var(--text-muted)',
-              transform: selectedOverlayTab === 'line' ? 'translateX(0px)' : 'translateX(-4px)',
-              transition: 'all 0.2s ease',
-              fontSize: '14px',
-              fontWeight: 'bold'
-            }}>
-              ➔
-            </span>
-          </div>
         </div>
 
         {/* Global Show/Hide helper */}
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
           <button 
             className="glass-button" 
-            onClick={() => updateSettings({ hudVisible: true, pedalsVisible: true, lineVisible: true })}
+            onClick={() => updateSettings({ hudVisible: true, pedalsVisible: true })}
             style={{ flex: 1, padding: '8px', justifyContent: 'center', fontSize: '11px' }}
           >
             Show All
           </button>
           <button 
             className="glass-button" 
-            onClick={() => updateSettings({ hudVisible: false, pedalsVisible: false, lineVisible: false })}
+            onClick={() => updateSettings({ hudVisible: false, pedalsVisible: false })}
             style={{ flex: 1, padding: '8px', justifyContent: 'center', fontSize: '11px', color: 'var(--neon-red)' }}
           >
             Hide All
@@ -590,7 +546,6 @@ export default function App() {
             <h3 style={{ fontSize: '16px', fontWeight: '700' }}>
               {selectedOverlayTab === 'hud' && '🎛️ Telemetry HUD Settings'}
               {selectedOverlayTab === 'pedals' && '🏎️ Pedals Reference Settings'}
-              {selectedOverlayTab === 'line' && '🛣️ Racing Line Reference Settings'}
             </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Configure:</span>
@@ -737,48 +692,7 @@ export default function App() {
             </>
           )}
 
-          {selectedOverlayTab === 'line' && (
-            <>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600' }}>
-                  <span>BACKGROUND TRANSPARENCY</span>
-                  <span className="num-mono" style={{ color: 'var(--neon-blue)' }}>{Math.round((1 - getVal('line', 'bgOpacity', 0.35)) * 100)}%</span>
-                </div>
-                <input 
-                  type="range" min="0" max="1" step="0.05"
-                  value={getVal('line', 'bgOpacity', 0.35)}
-                  onChange={(e) => handleSliderChange('line', 'bgOpacity', parseFloat(e.target.value))}
-                  style={sliderStyle('var(--neon-blue)')}
-                />
-              </div>
 
-              <div style={{ marginTop: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600' }}>
-                  <span>FOREGROUND OPACITY</span>
-                  <span className="num-mono" style={{ color: 'var(--neon-purple)' }}>{Math.round(getVal('line', 'opacity', 0.9) * 100)}%</span>
-                </div>
-                <input 
-                  type="range" min="0.8" max="1" step="0.02"
-                  value={getVal('line', 'opacity', 0.9)}
-                  onChange={(e) => handleSliderChange('line', 'opacity', parseFloat(e.target.value))}
-                  style={sliderStyle('var(--neon-purple)')}
-                />
-              </div>
-
-              <div style={{ marginTop: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600' }}>
-                  <span>OVERLAY SCALE</span>
-                  <span className="num-mono" style={{ color: 'var(--neon-green)' }}>{Math.round(getVal('line', 'scale', 1.0) * 100)}%</span>
-                </div>
-                <input 
-                  type="range" min="0.5" max="1.5" step="0.05"
-                  value={getVal('line', 'scale', 1.0)}
-                  onChange={(e) => handleSliderChange('line', 'scale', parseFloat(e.target.value))}
-                  style={sliderStyle('var(--neon-green)')}
-                />
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

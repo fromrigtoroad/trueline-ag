@@ -54,15 +54,6 @@ class TelemetryBridge:
         self.is_recording = False
         self.recorded_ticks = []
         
-        # Alignment state for GPS -> Live world-space coordinates
-        self.align_live_pts = [] # list of (x, z)
-        self.align_ref_pts = []  # list of (x, z)
-        self.align_theta = 0.0
-        self.align_dx = 0.0
-        self.align_dz = 0.0
-        self.aligned = False
-        self.dead_reckoned_dev = 0.0
-        
         # Timing state
         self.last_lap = -1
         self.lap_start_time = 0.0
@@ -77,15 +68,7 @@ class TelemetryBridge:
         self.braking_points = []
         self.throttle_points = []
         self.shift_points = []
-        self.dead_reckoned_dev = 0.0
-        
-        # Reset alignment state
-        self.align_live_pts = []
-        self.align_ref_pts = []
-        self.align_theta = 0.0
-        self.align_dx = 0.0
-        self.align_dz = 0.0
-        self.aligned = False
+
         
         if not interpolated:
             return
@@ -252,7 +235,6 @@ class TelemetryBridge:
         if lap != self.last_lap:
             self.lap_start_time = session_time
             self.last_lap = lap
-            self.dead_reckoned_dev = 0.0
             # If recording, check if we need to process the lap we just completed
             if self.is_recording and len(self.recorded_ticks) > 500:
                 # To prevent storing partial data, we could save the finished lap
@@ -274,67 +256,7 @@ class TelemetryBridge:
             user_lon = self.get_safe_val("Lon", 0.0)
             user_alt = self.get_safe_val("Alt", 0.0)
 
-        # Extract live coordinates
-        user_x = 0.0
-        user_z = 0.0
-        self.coords_available = False
-        player_idx = int(self.get_safe_val("PlayerCarIdx", 0))
-        
-        def get_coords_from_gps(lat_val, lon_val):
-            if not self.reference_lap:
-                return 0.0, 0.0
-            R_earth = 6371000.0
-            first_valid = next((s for s in self.reference_lap if s.get("lat") is not None and s.get("lon") is not None), None)
-            if first_valid:
-                lat_origin_rad = first_valid["lat"] * math.pi / 180.0
-                lon_origin_rad = first_valid["lon"] * math.pi / 180.0
-                cos_lat = math.cos(lat_origin_rad)
-                
-                user_lat_rad = lat_val * math.pi / 180.0
-                user_lon_rad = lon_val * math.pi / 180.0
-                u_x = (user_lon_rad - lon_origin_rad) * R_earth * cos_lat
-                u_z = (user_lat_rad - lat_origin_rad) * R_earth
-                return u_x, u_z
-            return 0.0, 0.0
 
-        if self.use_mock:
-            user_x, user_z = get_coords_from_gps(user_lat, user_lon)
-            # For mock, alignment is 1:1 Identity
-            self.align_theta = 0.0
-            self.align_dx = 0.0
-            self.align_dz = 0.0
-            self.aligned = True
-            self.coords_available = True
-        else:
-            # 1. Try absolute world coordinate arrays (live telemetry)
-            has_world_coords = False
-            try:
-                pos_x_arr = self.ir["CarIdxPosX"]
-                pos_z_arr = self.ir["CarIdxPosZ"]
-                if pos_x_arr and len(pos_x_arr) > player_idx and pos_x_arr[player_idx] is not None:
-                    user_x = pos_x_arr[player_idx]
-                    has_world_coords = True
-                if pos_z_arr and len(pos_z_arr) > player_idx and pos_z_arr[player_idx] is not None:
-                    user_z = pos_z_arr[player_idx]
-                    has_world_coords = True
-            except Exception as e:
-                # Log coordinate extraction errors
-                if not hasattr(self, "_last_coord_err_log") or self.tick_counter % 300 == 0:
-                    logging.error(f"Error reading CarIdxPosX/PosZ: {e}")
-                    self._last_coord_err_log = True
-
-            if has_world_coords:
-                self.coords_available = True
-
-            # 2. Fall back to GPS coordinates (e.g. in Replay files playback)
-            if not has_world_coords and user_lat != 0.0 and user_lon != 0.0:
-                user_x, user_z = get_coords_from_gps(user_lat, user_lon)
-                # GPS coords converted relative to ref lap origin require no translation alignment
-                self.align_theta = 0.0
-                self.align_dx = 0.0
-                self.align_dz = 0.0
-                self.aligned = True
-                self.coords_available = True
 
         # Debug logging loop diagnostics
         if not hasattr(self, "tick_counter"):
@@ -345,16 +267,9 @@ class TelemetryBridge:
             try:
                 logging.info(f"Tick {self.tick_counter}: ir_connected={self.ir_connected}, use_mock={self.use_mock}")
                 if self.ir:
-                    pos_x = self.get_safe_val("CarIdxPosX", None)
-                    pos_z = self.get_safe_val("CarIdxPosZ", None)
-                    logging.info(f"SDK Variables: PlayerCarIdx={player_idx}, Lat={user_lat}, Lon={user_lon}")
-                    logging.info(f"Live coordinates: user_x={user_x:.2f}, user_z={user_z:.2f}")
-                    if pos_x is not None:
-                        logging.info(f"CarIdxPosX size={len(pos_x) if hasattr(pos_x, '__len__') else 'not_len'}, type={type(pos_x)}")
-                    else:
-                        logging.info("CarIdxPosX is None!")
+                    logging.info(f"SDK Variables: Speed={self.get_safe_val('Speed', 0.0):.1f}, Lap={lap}, LapDistPct={lap_dist_pct:.3f}")
                 if self.reference_lap:
-                    logging.info(f"Reference Lap loaded: {len(self.reference_lap)} points. Aligned: {self.aligned}, theta={self.align_theta:.4f}, dx={self.align_dx:.1f}, dz={self.align_dz:.1f}, buffer={len(self.align_live_pts)}")
+                    logging.info(f"Reference Lap loaded: {len(self.reference_lap)} points.")
             except Exception as log_ex:
                 print(f"Error writing to bridge.log: {log_ex}")
 
@@ -426,91 +341,6 @@ class TelemetryBridge:
                 if next_throttle_dists:
                     dist_to_throttle = min(next_throttle_dists)
                     
-            # Compute lateral deviation (racing line offset) using self-calibrating projected coordinates
-            lateral_deviation = 0.0
-            
-            ref_x_metric = ref_point.get("x_metric", 0.0)
-            ref_z_metric = ref_point.get("z_metric", 0.0)
-            
-            is_driving = raw_data.get("speed", 0.0) > 10.0
-            
-            if getattr(self, "coords_available", False) and is_driving and user_x != 0.0 and user_z != 0.0:
-                self.align_live_pts.append((user_x, user_z))
-                self.align_ref_pts.append((ref_x_metric, ref_z_metric))
-                
-                # Keep sliding window of 180 points (approx 3 seconds of driving data)
-                if len(self.align_live_pts) > 180:
-                    self.align_live_pts.pop(0)
-                    self.align_ref_pts.pop(0)
-                    
-                # Calculate span of points to ensure we are moving and have heading diversity
-                first_pt = self.align_live_pts[0]
-                last_pt = self.align_live_pts[-1]
-                span = ((last_pt[0] - first_pt[0])**2 + (last_pt[1] - first_pt[1])**2)**0.5
-                
-                if len(self.align_live_pts) >= 10 and span > 20.0:
-                    N = len(self.align_live_pts)
-                    mean_x_live = sum(p[0] for p in self.align_live_pts) / N
-                    mean_z_live = sum(p[1] for p in self.align_live_pts) / N
-                    mean_x_ref = sum(p[0] for p in self.align_ref_pts) / N
-                    mean_z_ref = sum(p[1] for p in self.align_ref_pts) / N
-                    
-                    A = 0.0
-                    B = 0.0
-                    for j in range(N):
-                        x_l_c = self.align_live_pts[j][0] - mean_x_live
-                        z_l_c = self.align_live_pts[j][1] - mean_z_live
-                        x_r_c = self.align_ref_pts[j][0] - mean_x_ref
-                        z_r_c = self.align_ref_pts[j][1] - mean_z_ref
-                        
-                        A += x_l_c * x_r_c + z_l_c * z_r_c
-                        B += x_l_c * z_r_c - z_l_c * x_r_c
-                        
-                    self.align_theta = math.atan2(B, A)
-                    self.align_dx = mean_x_live - (mean_x_ref * math.cos(self.align_theta) - mean_z_ref * math.sin(self.align_theta))
-                    self.align_dz = mean_z_live - (mean_x_ref * math.sin(self.align_theta) + mean_z_ref * math.cos(self.align_theta))
-                    self.aligned = True
-
-                if self.aligned:
-                    cos_t = math.cos(self.align_theta)
-                    sin_t = math.sin(self.align_theta)
-                    
-                    # Project current reference point
-                    ref_x_proj = ref_x_metric * cos_t - ref_z_metric * sin_t + self.align_dx
-                    ref_z_proj = ref_x_metric * sin_t + ref_z_metric * cos_t + self.align_dz
-                    
-                    # Project adjacent reference points to compute heading vector
-                    prev_ref = self.reference_lap[(ref_idx - 1) % num_points]
-                    next_ref = self.reference_lap[(ref_idx + 1) % num_points]
-                    
-                    prev_x_metric = prev_ref.get("x_metric", ref_x_metric)
-                    prev_z_metric = prev_ref.get("z_metric", ref_z_metric)
-                    next_x_metric = next_ref.get("x_metric", ref_x_metric)
-                    next_z_metric = next_ref.get("z_metric", ref_z_metric)
-                    
-                    prev_x_proj = prev_x_metric * cos_t - prev_z_metric * sin_t + self.align_dx
-                    prev_z_proj = prev_x_metric * sin_t + prev_z_metric * cos_t + self.align_dz
-                    next_x_proj = next_x_metric * cos_t - next_z_metric * sin_t + self.align_dx
-                    next_z_proj = next_x_metric * sin_t + next_z_metric * cos_t + self.align_dz
-                    
-                    heading_x = next_x_proj - prev_x_proj
-                    heading_z = next_z_proj - prev_z_proj
-                    length = (heading_x**2 + heading_z**2)**0.5
-                    
-                    if length > 0.001:
-                        heading_x /= length
-                        heading_z /= length
-                        
-                        # Right perpendicular vector: (hz, -hx)
-                        right_x = heading_z
-                        right_z = -heading_x
-                        
-                        diff_x = ref_x_proj - user_x
-                        diff_z = ref_z_proj - user_z
-                        
-                        # Positive if reference is to the right of user, negative if left
-                        lateral_deviation = diff_x * right_x + diff_z * right_z
-            
             # Compute distance to next gear shift
             dist_to_shift = 9999.0
             shift_type = ""
@@ -538,7 +368,6 @@ class TelemetryBridge:
                 "distToThrottle": dist_to_throttle,
                 "distToShift": dist_to_shift,
                 "shiftType": shift_type,
-                "lateralDeviation": lateral_deviation,
                 "refBrakeActive": ref_point["brake"] > 0.05,
                 "refThrottleActive": ref_point["throttle"] > 0.05
             }
@@ -558,7 +387,6 @@ class TelemetryBridge:
                 "gear": raw_data["gear"],
                 "sessionTime": session_time,
                 "userLapTime": user_lap_time,
-                "coordsAvailable": getattr(self, "coords_available", False),
                 **comparison
             }
         }
