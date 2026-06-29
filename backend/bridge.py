@@ -525,7 +525,7 @@ class TelemetryBridge:
                 # If we steer left (live_yaw > ref_yaw), heading_error > 0, we drift to the left.
                 # Since LineCoachOverlay.jsx expects positive values for left of line, we add it directly!
                 lateral_velocity_error = live_speed * math.sin(heading_error)
-                self.dead_reckoned_dev += lateral_velocity_error * dt
+                self.dead_reckoned_dev = (self.dead_reckoned_dev * 0.999) + lateral_velocity_error * dt
                 
                 # Cap the dead reckoned deviation at 3.0 meters (same as maxDev in UI)
                 self.dead_reckoned_dev = max(-3.0, min(3.0, self.dead_reckoned_dev))
