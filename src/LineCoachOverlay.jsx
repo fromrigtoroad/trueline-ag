@@ -123,6 +123,8 @@ export default function LineCoachOverlay() {
   const hasRef = telemetry && telemetry.hasReference;
   const dev = telemetry ? telemetry.lateralDeviation : 0.0;
   
+  const coordsAvailable = telemetry && (telemetry.coordsAvailable !== false);
+
   // Center line is the reference line.
   // Positive playerDev means player is to the right of the reference line (ref is to the left, dev < 0).
   // Negative playerDev means player is to the left of the reference line (ref is to the right, dev > 0).
@@ -130,18 +132,20 @@ export default function LineCoachOverlay() {
   
   // Scale deviation to percentage (cap at 3.0 meters max deviation)
   const maxDev = 3.0;
-  const devPct = Math.min(100, Math.max(-100, (playerDev / maxDev) * 100));
+  const devPct = coordsAvailable ? Math.min(100, Math.max(-100, (playerDev / maxDev) * 100)) : 0.0;
   
   // Bar layout math: grows to the right if player is to the right, to the left if player is to the left
   const barLeft = devPct >= 0 ? '50%' : `calc(50% + ${devPct}%)`;
   const barWidth = `${Math.abs(devPct)}%`;
   
   // Label text
-  const label = dev > 0.05 
-    ? `REF LINE: ${dev.toFixed(1)}m RIGHT` 
-    : dev < -0.05 
-      ? `REF LINE: ${Math.abs(dev).toFixed(1)}m LEFT` 
-      : 'REF LINE: ON PATH';
+  const label = !coordsAvailable
+    ? '⚠️ LIVE POSITION RESTRICTED BY SIM'
+    : dev > 0.05 
+      ? `REF LINE: ${dev.toFixed(1)}m RIGHT` 
+      : dev < -0.05 
+        ? `REF LINE: ${Math.abs(dev).toFixed(1)}m LEFT` 
+        : 'REF LINE: ON PATH';
 
   const containerClass = `overlay-container ${!settings.locked ? 'unlocked-active' : ''}`;
 
@@ -214,9 +218,13 @@ export default function LineCoachOverlay() {
                 style={{ 
                   fontSize: '11px', 
                   fontWeight: '800', 
-                  color: textColor, 
+                  color: !coordsAvailable ? 'var(--neon-purple)' : textColor, 
                   textAlign: 'center',
-                  textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked ? 'none' : '0 0 6px rgba(0, 210, 255, 0.3)',
+                  textShadow: bgTheme === 'light' && bgOpacity > 0.6 && settings.locked 
+                    ? 'none' 
+                    : !coordsAvailable 
+                      ? '0 0 6px var(--neon-purple-glow)' 
+                      : '0 0 6px rgba(0, 210, 255, 0.3)',
                   letterSpacing: '0.5px'
                 }}
               >

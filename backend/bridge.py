@@ -267,6 +267,7 @@ class TelemetryBridge:
         # Extract live coordinates
         user_x = 0.0
         user_z = 0.0
+        self.coords_available = False
         player_idx = int(self.get_safe_val("PlayerCarIdx", 0))
         
         def get_coords_from_gps(lat_val, lon_val):
@@ -293,6 +294,7 @@ class TelemetryBridge:
             self.align_dx = 0.0
             self.align_dz = 0.0
             self.aligned = True
+            self.coords_available = True
         else:
             # 1. Try absolute world coordinate arrays (live telemetry)
             has_world_coords = False
@@ -311,6 +313,9 @@ class TelemetryBridge:
                     logging.error(f"Error reading CarIdxPosX/PosZ: {e}")
                     self._last_coord_err_log = True
 
+            if has_world_coords:
+                self.coords_available = True
+
             # 2. Fall back to GPS coordinates (e.g. in Replay files playback)
             if not has_world_coords and user_lat != 0.0 and user_lon != 0.0:
                 user_x, user_z = get_coords_from_gps(user_lat, user_lon)
@@ -319,6 +324,7 @@ class TelemetryBridge:
                 self.align_dx = 0.0
                 self.align_dz = 0.0
                 self.aligned = True
+                self.coords_available = True
 
         # Debug logging loop diagnostics
         if not hasattr(self, "tick_counter"):
@@ -542,6 +548,7 @@ class TelemetryBridge:
                 "gear": raw_data["gear"],
                 "sessionTime": session_time,
                 "userLapTime": user_lap_time,
+                "coordsAvailable": getattr(self, "coords_available", False),
                 **comparison
             }
         }
