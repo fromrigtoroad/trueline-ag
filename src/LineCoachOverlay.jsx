@@ -138,16 +138,13 @@ export default function LineCoachOverlay() {
   const barLeft = devPct >= 0 ? '50%' : `calc(50% + ${devPct}%)`;
   const barWidth = `${Math.abs(devPct)}%`;
   
-  const isDeadReckoned = telemetry && telemetry.isDeadReckoned;
-  const prefix = isDeadReckoned ? '~' : '';
-
   // Label text
   const label = !coordsAvailable
     ? '⚠️ LIVE POSITION RESTRICTED BY SIM'
     : dev > 0.05 
-      ? `REF LINE: ${prefix}${dev.toFixed(1)}m RIGHT` 
+      ? `REF LINE: ${dev.toFixed(1)}m RIGHT` 
       : dev < -0.05 
-        ? `REF LINE: ${prefix}${Math.abs(dev).toFixed(1)}m LEFT` 
+        ? `REF LINE: ${Math.abs(dev).toFixed(1)}m LEFT` 
         : 'REF LINE: ON PATH';
 
   const containerClass = `overlay-container ${!settings.locked ? 'unlocked-active' : ''}`;

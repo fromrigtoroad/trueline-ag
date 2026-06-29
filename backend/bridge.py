@@ -510,33 +510,6 @@ class TelemetryBridge:
                         
                         # Positive if reference is to the right of user, negative if left
                         lateral_deviation = diff_x * right_x + diff_z * right_z
-            else:
-                # 2. Dead reckoning integration when live coordinates are restricted
-                live_yaw = self.get_safe_val("Yaw", 0.0)
-                ref_yaw = ref_point.get("yaw", 0.0)
-                
-                # Normalize angle delta between -pi and +pi
-                heading_error = math.atan2(math.sin(live_yaw - ref_yaw), math.cos(live_yaw - ref_yaw))
-                
-                # Fetch live speed in m/s directly from SDK
-                live_speed = self.get_safe_val("Speed", 0.0)
-                
-                # Update dead reckoned lateral deviation
-                # If we steer left (live_yaw > ref_yaw), heading_error > 0, we drift to the left.
-                # Since LineCoachOverlay.jsx expects positive values for left of line, we add it directly!
-                lateral_velocity_error = live_speed * math.sin(heading_error)
-                self.dead_reckoned_dev = (self.dead_reckoned_dev * 0.999) + lateral_velocity_error * dt
-                
-                # Cap the dead reckoned deviation at 3.0 meters (same as maxDev in UI)
-                self.dead_reckoned_dev = max(-3.0, min(3.0, self.dead_reckoned_dev))
-                
-                # Snap to 0 if car is stationary or resetting
-                is_on_track = bool(self.get_safe_val("IsOnTrack", False))
-                on_pit_road = bool(self.get_safe_val("OnPitRoad", False))
-                if live_speed < 1.0 or not is_on_track or on_pit_road:
-                    self.dead_reckoned_dev = 0.0
-                    
-                lateral_deviation = self.dead_reckoned_dev
             
             # Compute distance to next gear shift
             dist_to_shift = 9999.0
@@ -585,8 +558,7 @@ class TelemetryBridge:
                 "gear": raw_data["gear"],
                 "sessionTime": session_time,
                 "userLapTime": user_lap_time,
-                "coordsAvailable": self.reference_lap is not None,
-                "isDeadReckoned": self.reference_lap is not None and not getattr(self, "coords_available", False) and not getattr(self, "use_mock", False),
+                "coordsAvailable": getattr(self, "coords_available", False),
                 **comparison
             }
         }
